@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Location Tracker</title>
+    <!-- Leaflet CSS for Map (No API Key Required) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        /* UI Popups and Cards */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .modal-card {
+            background: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            width: 85%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .modal-card h3 {
+            margin-bottom: 12px;
+            color: #1a1a1a;
+            font-size: 18px;
+        }
+        .modal-card p {
+            color: #555555;
+            font-size: 14px;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background-color: #2563eb;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #e5e7eb;
+            color: #374151;
+        }
+        
+        /* Top Navigation Button */
+        .top-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 2000;
+        }
+        .reset-btn {
+            background: #ffffff;
+            color: #1f2937;
+            border: 1px solid #d1d5db;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            cursor: pointer;
+        }
+
+        /* 3D Model Styled House Marker */
+        .house-marker-3d {
+            width: 36px;
+            height: 36px;
+            background: #ef4444;
+            border: 3px solid #ffffff;
+            border-radius: 6px;
+            transform: rotateX(25deg) rotateY(-15deg);
+            box-shadow: 4px 6px 12px rgba(0,0,0,0.4);
+            position: relative;
+        }
+        .house-marker-3d::before {
+            content: '';
+            position: absolute;
+            top: -14px;
+            left: -3px;
+            width: 0;
+            height: 0;
+            border-left: 18px solid transparent;
+            border-right: 18px solid transparent;
+            border-bottom: 14px solid #b91c1c;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="top-controls">
+        <button id="resetHomeBtn" class="reset-btn">Reset Home Location</button>
+    </div>
+
+    <!-- Custom Modal for Location & Confirmation (Avoids raw error alerts) -->
+    <div id="appModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="modalTitle">Enable Location Access</h3>
+            <p id="modalMessage">Please allow location access and ensure your GPS is enabled to use the map features.</p>
+            <div class="btn-group" id="modalActions">
+                <button id="confirmBtn" class="btn btn-primary">Enable GPS</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS (No API Key Required) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        let map = null;
+        let userMarker = null;
+        let homeMarker = null;
+        let homeCoords = null;
+        
+        let pathHistory = []; // Track visited coordinates
+        let dotMarkers = [];
+        let polyline = null;
+        
+        let lastMoveTime = Date.now();
+        let stationaryTimer = null;
+        const STAY_THRESHOLD_MS = 30 * 60 * 1000; // 30 Minutes
+
+        const modal = document.getElementById('appModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalActions = document.getElementById('modalActions');
+        const resetHomeBtn = document.getElementById('resetHomeBtn');
+
+        // Initialize Application
+        window.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            requestLocationPermission();
+        });
+
+        function initMap() {
+            // Default center if GPS is pending
+            map = L.map('map', { zoomControl: false }).setView([0, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+        }
+
+        function requestLocationPermission() {
+            if (!navigator.geolocation) {
+                showErrorModal("Geolocation Unavailable", "Your browser does not support geolocation tracking.");
+                return;
+            }
+
+            // Secure Context (HTTPS) check to prevent the issue in screenshot
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                showErrorModal("Secure Connection Required", "Location tracking requires HTTPS connection. Please switch to HTTPS.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                onLocationSuccess,
+                onLocationError,
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
+        function onLocationSuccess(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const currentPos = [lat, lng];
+
+            map.setView(currentPos, 18); // Auto Zoom to location
+
+            if (!homeCoords) {
+                promptHomeConfirmation(currentPos);
+            }
+
+            // Start Continuous Tracking
+            navigator.geolocation.watchPosition(trackUserMovement, onLocationError, {
+                enableHighAccuracy: true,
+                maximumAge: 1000
+            });
+        }
+
+        function promptHomeConfirmation(coords) {
+            modalTitle.innerText = "Confirm Home Location";
+            modalMessage.innerText = "Is the place where you are currently sitting your home?";
+            modalActions.innerHTML = `
+                <button id="yesHomeBtn" class="btn btn-primary">Yes, Save Home</button>
+            `;
+            modal.classList.remove('hidden');
+
+            document.getElementById('yesHomeBtn').onclick = () => {
+                setHomeLocation(coords);
+                modal.classList.add('hidden');
+            };
+        }
+
+        function setHomeLocation(coords) {
+            homeCoords = coords;
+            
+            if (homeMarker) map.removeLayer(homeMarker);
+
+            // Custom 3D Model-styled CSS Marker
+            const houseIcon = L.divIcon({
+                className: 'custom-house-icon',
+                html: `<div class="house-marker-3d"></div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 36]
+            });
+
+            homeMarker = L.marker(coords, { icon: houseIcon }).addTo(map);
+            map.flyTo(coords, 18);
+        }
+
+        function trackUserMovement(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const newPos = [lat, lng];
+
+            // 1. Backtracking Logic: If returning on path, erase backward steps
+            if (pathHistory.length > 1) {
+                const lastPos = pathHistory[pathHistory.length - 1];
+                const prevPos = pathHistory[pathHistory.length - 2];
+                
+                const distToPrev = getDistance(newPos, prevPos);
+                const distToLast = getDistance(newPos, lastPos);
+
+                if (distToPrev < distToLast) {
+                    // Moving backwards towards home -> remove last dot
+                    pathHistory.pop();
+                    const removedDot = dotMarkers.pop();
+                    if (removedDot) map.removeLayer(removedDot);
+                    updatePolyline();
+                    return;
+                }
+            }
+
+            // 2. Add New Tracking Dot
+            pathHistory.push(newPos);
+            const dot = L.circleMarker(newPos, {
+                radius: 4,
+                color: '#2563eb',
+                fillColor: '#3b82f6',
+                fillOpacity: 0.9,
+                stroke: false
+            }).addTo(map);
+            
+            dotMarkers.push(dot);
+
+            // 3. Stationary timer check (30 min stay converts dots to solid path)
+            resetStationaryTimer();
+        }
+
+        function resetStationaryTimer() {
+            clearTimeout(stationaryTimer);
+            stationaryTimer = setTimeout(() => {
+                // If user stays 30 mins, solidify dots to line
+                updatePolyline();
+            }, STAY_THRESHOLD_MS);
+        }
+
+        function updatePolyline() {
+            if (polyline) map.removeLayer(polyline);
+            polyline = L.polyline(pathHistory, { color: '#2563eb', weight: 4, opacity: 0.8 }).addTo(map);
+        }
+
+        function onLocationError(error) {
+            let msg = "Unable to retrieve GPS location.";
+            if (error.code === error.PERMISSION_DENIED) {
+                msg = "Location permission denied. Please enable GPS permissions in browser settings.";
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+                msg = "Location information unavailable. Please turn on mobile GPS.";
+            } else if (error.code === error.TIMEOUT) {
+                msg = "Location request timed out. Retrying...";
+            }
+            showErrorModal("GPS Error", msg);
+        }
+
+        function showErrorModal(title, message) {
+            modalTitle.innerText = title;
+            modalMessage.innerText = message;
+            modalActions.innerHTML = `<button onclick="requestLocationPermission()" class="btn btn-primary">Try Again</button>`;
+            modal.classList.remove('hidden');
+        }
+
+        // Reset Home Button Handler
+        resetHomeBtn.addEventListener('click', () => {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                const currentPos = [pos.coords.latitude, pos.coords.longitude];
+                promptHomeConfirmation(currentPos);
+            }, onLocationError);
+        });
+
+        // Helper Distance Formula (Haversine)
+        function getDistance(coord1, coord2) {
+            const R = 6371e3;
+            const rad1 = coord1[0] * Math.PI / 180;
+            const rad2 = coord2[0] * Math.PI / 180;
+            const dRad = (coord2[0] - coord1[0]) * Math.PI / 180;
+            const dLng = (coord2[1] - coord1[1]) * Math.PI / 180;
+
+            const a = Math.sin(dRad/2) * Math.sin(dRad/2) +
+                      Math.cos(rad1) * Math.cos(rad2) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+    </script>
+</body>
+</html>
