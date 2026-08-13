@@ -40,7 +40,7 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* HUD & Controls */
+        /* HUD Overlay & Controls */
         .top-controls {
             position: absolute;
             top: 15px;
@@ -129,10 +129,9 @@
 
     <div id="map"></div>
 
-    <!-- HUD Overlay -->
     <div class="hud-panel">
         <div class="hud-item">رفتار: <span id="speedVal" class="hud-value">0.0</span> km/h</div>
-        <div class="hud-item">فاصلہ: <span id="distVal" class="hud-value">0</span> m</div>
+        <div class="hud-item">طے شدہ فاصلہ: <span id="distVal" class="hud-value">0</span> m</div>
     </div>
 
     <div class="top-controls">
@@ -193,14 +192,13 @@
             startBackgroundTracking();
         });
 
-        // Enable Screen Wake Lock for background persistence
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
                 }
             } catch (err) {
-                console.log("Wake Lock active error:", err);
+                console.log("Wake Lock status:", err);
             }
         }
 
@@ -423,5 +421,4 @@
         }
     </script>
 </body>
-    </html>
-    
+</html>
