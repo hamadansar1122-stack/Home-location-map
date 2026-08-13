@@ -61,14 +61,13 @@
             font-size: 13px;
         }
 
-        /* Home Direction Indicator Box */
         .home-pointer-box {
             position: absolute;
             top: 15px;
             left: 15px;
             z-index: 2000;
             background: rgba(15, 23, 42, 0.9);
-            border: 1px solid rgba(239, 68, 68, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.3);
             padding: 10px 14px;
             border-radius: 10px;
             color: white;
@@ -139,6 +138,7 @@
         .modal-card p { color: #4b5563; font-size: 14px; margin-bottom: 20px; }
         .btn-group { display: flex; gap: 10px; justify-content: center; }
         .btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-danger { background-color: #ef4444; color: white; }
         .btn-secondary { background-color: #e5e7eb; color: #374151; }
         .btn-primary { background-color: #2563eb; color: white; }
         .hidden { display: none !important; }
@@ -148,17 +148,16 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <p id="loaderText">Connecting to High-Precision GPS...</p>
+        <p id="loaderText">Locking Real-time Location...</p>
     </div>
 
     <div id="map"></div>
 
-    <!-- Home Direction Box -->
     <div id="homePointer" class="home-pointer-box hidden">
         <span id="homeArrow" class="arrow-icon">⬆️</span>
         <div>
             <div>Home Direction</div>
-            <div style="font-size: 11px; color: #f87171;" id="homeDistText">0 m away</div>
+            <div style="font-size: 11px; color: #38bdf8;" id="homeDistText">0 m away</div>
         </div>
     </div>
 
@@ -173,13 +172,26 @@
         <button id="recenterBtn" class="btn-ctrl">🎯 Recenter</button>
     </div>
 
+    <!-- Initial Set Home Dialog -->
     <div id="initHomeModal" class="modal-overlay hidden">
         <div class="modal-card">
             <h3>Welcome! 🏠</h3>
-            <p>Set your current location as Home?</p>
+            <p>Set your current real-time location as Home?</p>
             <div class="btn-group">
                 <button id="initNoBtn" class="btn btn-secondary">No</button>
                 <button id="initYesBtn" class="btn btn-primary">Yes, Set Home</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete/Cancel Home Modal -->
+    <div id="deleteHomeModal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>Home Options 🏠</h3>
+            <p>Do you want to delete this Home location?</p>
+            <div class="btn-group">
+                <button id="cancelDeleteBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
             </div>
         </div>
     </div>
@@ -193,7 +205,7 @@
         let homeMarker = null;
         
         let pathHistory = [];
-        let redDots = []; // Array to store red dot objects
+        let whiteDots = []; 
         
         let isAddHomeMode = false;
         let isFirstLocationFound = false;
@@ -234,7 +246,7 @@
 
             map.on('click', (e) => {
                 if (isAddHomeMode) {
-                    setHomeLocation(e.latlng);
+                    setHomeLocation([e.latlng.lat, e.latlng.lng]);
                     isAddHomeMode = false;
                     document.getElementById('addHomeBtn').innerText = "🏠 Add Home";
                     document.getElementById('addHomeBtn').style.background = "rgba(0, 0, 0, 0.85)";
@@ -262,7 +274,7 @@
                 onLocationError, 
                 { 
                     enableHighAccuracy: true, 
-                    maximumAge: 1000, 
+                    maximumAge: 0, 
                     timeout: 10000 
                 }
             );
@@ -272,7 +284,8 @@
             const accuracy = position.coords.accuracy;
             document.getElementById('accVal').innerText = Math.round(accuracy);
 
-            if (accuracy > 20) return; // Strict filter to avoid building jumps
+            // Strict Filter: Only accept accurate GPS points (<15m) to avoid starting at wrong places
+            if (accuracy > 15) return;
 
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
@@ -286,7 +299,6 @@
                 lastValidCoords = currentCoords;
                 loader.classList.add('hidden');
                 
-                // Auto Zoom-In initially
                 map.setView(currentCoords, 19);
                 document.getElementById('initHomeModal').classList.remove('hidden');
                 
@@ -296,10 +308,10 @@
 
             let moveDist = getDistance(lastValidCoords, currentCoords);
 
-            // Handle Backtracking Removal of Red Dots
+            // Backtracking logic for White Dots
             handleBacktrackingDots(currentCoords);
 
-            // Add new Red Dot if moved 4 meters away from previous dot
+            // Add WHITE Dot if moved 4 meters away
             if (moveDist >= 4) {
                 totalDistance += moveDist;
                 document.getElementById('distVal').innerText = Math.round(totalDistance);
@@ -307,51 +319,65 @@
                 lastValidCoords = currentCoords;
                 userMarker.setLatLng(currentCoords);
                 
-                addRedDot(currentCoords);
+                addWhiteDot(currentCoords);
             } else {
                 userMarker.setLatLng(currentCoords);
             }
 
-            // Update Home Direction Arrow
             updateHomePointer();
         }
 
-        function addRedDot(coords) {
+        function addWhiteDot(coords) {
             pathHistory.push(coords);
             const dot = L.circleMarker(coords, {
-                radius: 4,
-                color: '#ef4444',
-                fillColor: '#f87171',
-                fillOpacity: 0.9,
+                radius: 4.5,
+                color: '#ffffff',
+                fillColor: '#ffffff',
+                fillOpacity: 0.95,
                 stroke: false
             }).addTo(map);
 
-            redDots.push({ coords: coords, layer: dot });
+            whiteDots.push({ coords: coords, layer: dot });
         }
 
         function handleBacktrackingDots(newCoords) {
             if (pathHistory.length < 2) return;
 
-            // Check if user returned to a previous dot position (within 6 meters)
             for (let i = pathHistory.length - 2; i >= 0; i--) {
                 let distToOldDot = getDistance(newCoords, pathHistory[i]);
                 if (distToOldDot < 6) {
-                    // Remove all forward dots since user backtracked!
                     for (let j = pathHistory.length - 1; j > i; j--) {
-                        map.removeLayer(redDots[j].layer);
+                        map.removeLayer(whiteDots[j].layer);
                     }
                     pathHistory = pathHistory.slice(0, i + 1);
-                    redDots = redDots.slice(0, i + 1);
+                    whiteDots = whiteDots.slice(0, i + 1);
                     break;
                 }
             }
         }
 
-        function setHomeLocation(latlng) {
-            homeCoords = [latlng.lat, latlng.lng];
+        function setHomeLocation(coords) {
+            homeCoords = coords;
             if (homeMarker) map.removeLayer(homeMarker);
+            
             homeMarker = L.marker(homeCoords, { icon: createEmojiIcon('🏠') }).addTo(map);
+            
+            // Add Click Listener to Home Emoji for Cancel / Delete Options
+            homeMarker.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                document.getElementById('deleteHomeModal').classList.remove('hidden');
+            });
+
             updateHomePointer();
+        }
+
+        function removeHomeLocation() {
+            if (homeMarker) {
+                map.removeLayer(homeMarker);
+                homeMarker = null;
+            }
+            homeCoords = null;
+            document.getElementById('homePointer').classList.add('hidden');
         }
 
         function updateHomePointer() {
@@ -360,12 +386,10 @@
             let distToHome = getDistance(currentCoords, homeCoords);
             const pointerBox = document.getElementById('homePointer');
 
-            // Show arrow box if user is > 15 meters away from home
             if (distToHome > 15) {
                 pointerBox.classList.remove('hidden');
                 document.getElementById('homeDistText').innerText = Math.round(distToHome) + " m away";
 
-                // Calculate angle from user to home
                 let angle = getBearing(currentCoords[0], currentCoords[1], homeCoords[0], homeCoords[1]);
                 document.getElementById('homeArrow').style.transform = `rotate(${angle}deg)`;
             } else {
@@ -394,11 +418,20 @@
         });
 
         document.getElementById('initYesBtn').addEventListener('click', () => {
-            if (currentCoords) setHomeLocation({ lat: currentCoords[0], lng: currentCoords[1] });
+            if (currentCoords) setHomeLocation(currentCoords);
             document.getElementById('initHomeModal').classList.add('hidden');
         });
         document.getElementById('initNoBtn').addEventListener('click', () => {
             document.getElementById('initHomeModal').classList.add('hidden');
+        });
+
+        // Cancel & Delete Modal Controls
+        document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+            document.getElementById('deleteHomeModal').classList.add('hidden');
+        });
+        document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+            removeHomeLocation();
+            document.getElementById('deleteHomeModal').classList.add('hidden');
         });
 
         function getDistance(coord1, coord2) {
@@ -414,4 +447,4 @@
         }
     </script>
 </body>
-        </html>
+                </html>
