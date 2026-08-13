@@ -1,30 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ur">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPS Location Tracker 3D</title>
-    <!-- Leaflet CSS -->
+    <title>ایڈوانسڈ لائیو جی پی ایس ٹریکر</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            direction: rtl;
         }
-        html, body {
+        html, body, #map {
             width: 100%;
             height: 100%;
             overflow: hidden;
+            background-color: #000;
         }
-        #map {
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
-        
-        /* Loading Screen */
         #loader {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -46,28 +40,50 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Control Bar */
+        /* HUD & Controls */
         .top-controls {
             position: absolute;
             top: 15px;
             right: 15px;
             z-index: 2000;
             display: flex;
+            flex-direction: column;
             gap: 10px;
         }
         .btn-ctrl {
-            background: rgba(0, 0, 0, 0.75);
+            background: rgba(0, 0, 0, 0.85);
             color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 10px 16px;
+            padding: 10px 14px;
             border-radius: 8px;
             font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             cursor: pointer;
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(5px);
+            font-size: 13px;
         }
 
-        /* Emoji Marker Styles */
+        .hud-panel {
+            position: absolute;
+            bottom: 25px;
+            left: 15px;
+            z-index: 2000;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 12px 18px;
+            border-radius: 12px;
+            color: white;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+        .hud-item {
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        .hud-value {
+            font-weight: bold;
+            color: #38bdf8;
+        }
+
         .emoji-marker {
             font-size: 28px;
             text-align: center;
@@ -76,7 +92,6 @@
             filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.6));
         }
 
-        /* Modal Overlays */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -93,59 +108,60 @@
             width: 85%;
             max-width: 380px;
             text-align: center;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            color: #111;
         }
-        .modal-card h3 { margin-bottom: 12px; color: #111827; font-size: 18px; }
-        .modal-card p { color: #4b5563; font-size: 14px; margin-bottom: 20px; line-height: 1.4; }
+        .modal-card h3 { margin-bottom: 12px; }
+        .modal-card p { color: #4b5563; font-size: 14px; margin-bottom: 20px; }
         .btn-group { display: flex; gap: 10px; justify-content: center; }
-        .btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-danger { background-color: #ef4444; color: white; }
         .btn-secondary { background-color: #e5e7eb; color: #374151; }
         .btn-primary { background-color: #2563eb; color: white; }
-        
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
-    <!-- Loading Screen -->
     <div id="loader">
         <div class="spinner"></div>
-        <p id="loaderText">Finding your location...</p>
+        <p id="loaderText">جی پی ایس کنیکٹ ہو رہا ہے...</p>
     </div>
 
-    <!-- Map Container -->
     <div id="map"></div>
 
-    <div class="top-controls">
-        <button id="addHomeBtn" class="btn-ctrl">➕ Add House</button>
+    <!-- HUD Overlay -->
+    <div class="hud-panel">
+        <div class="hud-item">رفتار: <span id="speedVal" class="hud-value">0.0</span> km/h</div>
+        <div class="hud-item">فاصلہ: <span id="distVal" class="hud-value">0</span> m</div>
     </div>
 
-    <!-- Startup "Is this your home?" Modal -->
+    <div class="top-controls">
+        <button id="addHomeBtn" class="btn-ctrl">🏠 گھر شامل کریں</button>
+        <button id="recenterBtn" class="btn-ctrl">🎯 لوکیشن پر جائیں</button>
+    </div>
+
     <div id="initHomeModal" class="modal-overlay hidden">
         <div class="modal-card">
-            <h3>Welcome! 🏠</h3>
-            <p>Is the place you are currently at your home?</p>
+            <h3>خوش آمدید! 🏠</h3>
+            <p>کیا آپ اس وقت اپنے گھر پر موجود ہیں؟</p>
             <div class="btn-group">
-                <button id="initNoBtn" class="btn btn-secondary">No</button>
-                <button id="initYesBtn" class="btn btn-primary">Yes, It's Home</button>
+                <button id="initNoBtn" class="btn btn-secondary">نہیں</button>
+                <button id="initYesBtn" class="btn btn-primary">جی ہاں، یہ گھر ہے</button>
             </div>
         </div>
     </div>
 
-    <!-- House Options (Reset/Cancel) Modal -->
     <div id="houseActionModal" class="modal-overlay hidden">
         <div class="modal-card">
-            <h3>House Options 🏠</h3>
-            <p>Do you want to reset (remove) this home location?</p>
+            <h3>گھر کی سیٹنگز 🏠</h3>
+            <p>کیا آپ اس گھر کے لوکیشن نشان کو ختم کرنا چاہتے ہیں؟</p>
             <div class="btn-group">
-                <button id="cancelHouseBtn" class="btn btn-secondary">Cancel</button>
-                <button id="resetHouseBtn" class="btn btn-danger">Reset</button>
+                <button id="cancelHouseBtn" class="btn btn-secondary">منسوخ کریں</button>
+                <button id="resetHouseBtn" class="btn btn-danger">ریسیٹ کریں</button>
             </div>
         </div>
     </div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
@@ -158,36 +174,53 @@
         let isAddHomeMode = false;
         let selectedHouseMarker = null;
         let isFirstLocationFound = false;
+        let currentCoords = null;
+        let totalDistance = 0;
+
+        let stayStartTime = null;
+        let stayPosition = null;
+        let wakeLock = null;
 
         const loader = document.getElementById('loader');
         const initHomeModal = document.getElementById('initHomeModal');
         const houseActionModal = document.getElementById('houseActionModal');
         const addHomeBtn = document.getElementById('addHomeBtn');
-        let currentCoords = null;
+        const recenterBtn = document.getElementById('recenterBtn');
 
         window.addEventListener('DOMContentLoaded', () => {
             initMap();
-            startTracking();
+            requestWakeLock();
+            startBackgroundTracking();
         });
 
+        // Enable Screen Wake Lock for background persistence
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.log("Wake Lock active error:", err);
+            }
+        }
+
         function initMap() {
-            // Satellite 3D-Vision Style Base Layer (Esri World Imagery)
-            map = L.map('map', { zoomControl: false }).setView([0, 0], 2);
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                maxZoom: 19,
-                attribution: 'Tiles &copy; Esri &mdash; Satellite View'
+            map = L.map('map', { zoomControl: false, maxZoom: 20 }).setView([0, 0], 2);
+            
+            L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: 'Google Maps'
             }).addTo(map);
 
-            // Zoom adaptive scaling for lines and dots
             map.on('zoomend', updateZoomScaling);
 
-            // Click map to manually add house (if Add House button is active)
             map.on('click', (e) => {
                 if (isAddHomeMode) {
                     addHouseMarker(e.latlng);
                     isAddHomeMode = false;
-                    addHomeBtn.innerText = "➕ Add House";
-                    addHomeBtn.style.background = "rgba(0, 0, 0, 0.75)";
+                    addHomeBtn.innerText = "🏠 گھر شامل کریں";
+                    addHomeBtn.style.background = "rgba(0, 0, 0, 0.85)";
                 }
             });
         }
@@ -201,115 +234,110 @@
             });
         }
 
-        function startTracking() {
+        function startBackgroundTracking() {
             if (!navigator.geolocation) {
-                alert("Geolocation is not supported by your browser.");
+                alert("آپ کے ڈیوائس میں جی پی ایس سپورٹ نہیں ہے۔");
                 loader.classList.add('hidden');
                 return;
             }
-            navigator.geolocation.watchPosition(onLocationUpdate, onLocationError, { 
-                enableHighAccuracy: true, 
-                maximumAge: 1000 
-            });
+
+            navigator.geolocation.watchPosition(
+                onLocationUpdate, 
+                onLocationError, 
+                { 
+                    enableHighAccuracy: true, 
+                    maximumAge: 0, 
+                    timeout: 5000 
+                }
+            );
         }
 
         function onLocationUpdate(position) {
+            const accuracy = position.coords.accuracy;
+            if (accuracy > 25) return;
+
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
+            const speed = position.coords.speed ? (position.coords.speed * 3.6).toFixed(1) : "0.0";
+            
+            document.getElementById('speedVal').innerText = speed;
+
             currentCoords = [lat, lng];
 
-            // When map gets location for the FIRST time
             if (!isFirstLocationFound) {
                 isFirstLocationFound = true;
-                loader.classList.add('hidden'); // Hide loading screen
-                map.setView(currentCoords, 18);
-                
-                // Show startup popup
+                loader.classList.add('hidden');
+                map.setView(currentCoords, 19);
                 initHomeModal.classList.remove('hidden');
             }
 
-            // Update user marker (🚶‍♂️)
             if (!userMarker) {
                 userMarker = L.marker(currentCoords, { icon: createEmojiIcon('🚶‍♂️'), zIndexOffset: 1000 }).addTo(map);
             } else {
                 userMarker.setLatLng(currentCoords);
             }
 
-            // Real Movement Tracking Logic (Avoid random dots)
-            if (pathHistory.length > 0) {
-                const lastPos = pathHistory[pathHistory.length - 1];
-                const distanceMoved = getDistance(currentCoords, lastPos);
-                if (distanceMoved < 3) return; // Only draw if moved > 3 meters
+            map.panTo(currentCoords, { animate: true, duration: 0.5 });
+
+            handleBacktracking(currentCoords);
+            handleStayDuration(currentCoords);
+        }
+
+        function handleBacktracking(newCoords) {
+            if (pathHistory.length < 2) return;
+
+            for (let i = pathHistory.length - 2; i >= 0; i--) {
+                let dist = getDistance(newCoords, pathHistory[i]);
+                if (dist < 8) {
+                    pathHistory = pathHistory.slice(0, i + 1);
+                    let removedDots = dotMarkers.splice(i + 1);
+                    removedDots.forEach(d => map.removeLayer(d));
+                    updatePolyline();
+                    break;
+                }
+            }
+        }
+
+        function handleStayDuration(newCoords) {
+            const now = Date.now();
+            if (!stayPosition) {
+                stayPosition = newCoords;
+                stayStartTime = now;
+                return;
             }
 
-            pathHistory.push(currentCoords);
+            let distFromStay = getDistance(newCoords, stayPosition);
+            if (distFromStay < 10) {
+                let minutesStayed = (now - stayStartTime) / (1000 * 60);
+                if (minutesStayed >= 30) {
+                    commitPathPoint(newCoords);
+                    stayStartTime = now;
+                }
+            } else {
+                if (pathHistory.length > 0) {
+                    totalDistance += distFromStay;
+                    document.getElementById('distVal').innerText = Math.round(totalDistance);
+                }
+                stayPosition = newCoords;
+                stayStartTime = now;
+            }
+        }
 
-            // Draw Dot
+        function commitPathPoint(coords) {
+            pathHistory.push(coords);
             const zoomLevel = map.getZoom();
-            const dot = L.circleMarker(currentCoords, {
-                radius: Math.max(2, zoomLevel - 13),
-                color: '#3b82f6',
+            const dot = L.circleMarker(coords, {
+                radius: Math.max(3, zoomLevel - 13),
+                color: '#2563eb',
                 fillColor: '#60a5fa',
                 fillOpacity: 0.9,
                 stroke: false
             }).addTo(map);
-            
+
             dotMarkers.push(dot);
             updatePolyline();
         }
 
-        function onLocationError(error) {
-            document.getElementById('loaderText').innerText = "Please turn on GPS / Location!";
-            console.error("GPS Error:", error);
-        }
-
-        // Setup Initial Home Popup Buttons
-        document.getElementById('initYesBtn').addEventListener('click', () => {
-            if (currentCoords) addHouseMarker(currentCoords);
-            initHomeModal.classList.add('hidden');
-        });
-        document.getElementById('initNoBtn').addEventListener('click', () => {
-            initHomeModal.classList.add('hidden');
-        });
-
-        // House Marker Logic
-        function addHouseMarker(latlng) {
-            const house = L.marker(latlng, { icon: createEmojiIcon('🏠') }).addTo(map);
-            house.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                selectedHouseMarker = house;
-                houseActionModal.classList.remove('hidden');
-            });
-            houseMarkers.push(house);
-        }
-
-        // Top Control Button (Add House)
-        addHomeBtn.addEventListener('click', () => {
-            isAddHomeMode = !isAddHomeMode;
-            if (isAddHomeMode) {
-                addHomeBtn.innerText = "📍 Click Map to Place";
-                addHomeBtn.style.background = "#2563eb";
-            } else {
-                addHomeBtn.innerText = "➕ Add House";
-                addHomeBtn.style.background = "rgba(0, 0, 0, 0.75)";
-            }
-        });
-
-        // House Actions (Cancel/Reset)
-        document.getElementById('cancelHouseBtn').addEventListener('click', () => {
-            houseActionModal.classList.add('hidden');
-            selectedHouseMarker = null;
-        });
-        document.getElementById('resetHouseBtn').addEventListener('click', () => {
-            if (selectedHouseMarker) {
-                map.removeLayer(selectedHouseMarker);
-                houseMarkers = houseMarkers.filter(m => m !== selectedHouseMarker);
-                selectedHouseMarker = null;
-            }
-            houseActionModal.classList.add('hidden');
-        });
-
-        // Draw Lines & Scale with Zoom
         function updatePolyline() {
             if (polyline) map.removeLayer(polyline);
             const zoomLevel = map.getZoom();
@@ -323,14 +351,65 @@
         function updateZoomScaling() {
             const zoomLevel = map.getZoom();
             dotMarkers.forEach(dot => {
-                dot.setRadius(Math.max(2, zoomLevel - 13));
+                dot.setRadius(Math.max(3, zoomLevel - 13));
             });
             if (polyline) {
                 polyline.setStyle({ weight: Math.max(3, zoomLevel - 12) });
             }
         }
 
-        // Distance Formula (Meters)
+        function onLocationError(error) {
+            document.getElementById('loaderText').innerText = "جی پی ایس سگنل کی تلاش جاری ہے...";
+        }
+
+        document.getElementById('initYesBtn').addEventListener('click', () => {
+            if (currentCoords) addHouseMarker(currentCoords);
+            initHomeModal.classList.add('hidden');
+        });
+        document.getElementById('initNoBtn').addEventListener('click', () => {
+            initHomeModal.classList.add('hidden');
+        });
+
+        function addHouseMarker(latlng) {
+            const house = L.marker(latlng, { icon: createEmojiIcon('🏠') }).addTo(map);
+            house.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                selectedHouseMarker = house;
+                houseActionModal.classList.remove('hidden');
+            });
+            houseMarkers.push(house);
+        }
+
+        addHomeBtn.addEventListener('click', () => {
+            isAddHomeMode = !isAddHomeMode;
+            if (isAddHomeMode) {
+                addHomeBtn.innerText = "📍 نقشے پر کلک کریں";
+                addHomeBtn.style.background = "#2563eb";
+            } else {
+                addHomeBtn.innerText = "🏠 گھر شامل کریں";
+                addHomeBtn.style.background = "rgba(0, 0, 0, 0.85)";
+            }
+        });
+
+        recenterBtn.addEventListener('click', () => {
+            if (currentCoords) {
+                map.setView(currentCoords, 19, { animate: true });
+            }
+        });
+
+        document.getElementById('cancelHouseBtn').addEventListener('click', () => {
+            houseActionModal.classList.add('hidden');
+            selectedHouseMarker = null;
+        });
+        document.getElementById('resetHouseBtn').addEventListener('click', () => {
+            if (selectedHouseMarker) {
+                map.removeLayer(selectedHouseMarker);
+                houseMarkers = houseMarkers.filter(m => m !== selectedHouseMarker);
+                selectedHouseMarker = null;
+            }
+            houseActionModal.classList.add('hidden');
+        });
+
         function getDistance(coord1, coord2) {
             const R = 6371e3;
             const rad1 = coord1[0] * Math.PI / 180;
@@ -345,4 +424,4 @@
     </script>
 </body>
     </html>
-                    
+    
