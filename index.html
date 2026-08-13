@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hamid's Ultimate Ultra Pro GPS Tracker</title>
+    <title>Hamid's 3D Ultra Pro GPS Tracker</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -29,6 +29,7 @@
         }
         .btn-highlight { background: #22c55e; border: none; }
         .btn-danger-custom { background: #ef4444; border: none; }
+        .btn-3d { background: #8b5cf6; border: none; }
 
         .hud-panel {
             position: absolute; bottom: 25px; left: 15px; z-index: 2000;
@@ -71,7 +72,7 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <p>Locking Current Real Location...</p>
+        <p>Locking Current Real Location & Anti-Teleport...</p>
     </div>
 
     <div id="map"></div>
@@ -84,6 +85,7 @@
     <div class="top-controls">
         <button id="addPlaceBtn" class="btn-ctrl">📍 Add Place</button>
         <button id="makeLineBtn" class="btn-ctrl btn-highlight">📏 Make Line</button>
+        <button id="toggle3dBtn" class="btn-ctrl btn-3d">🌐 3D Vision: OFF</button>
         <button id="goHomeTriggerBtn" class="btn-ctrl" style="background:#2563eb;">🏠 Go Home</button>
         <button id="manualReturnBtn" class="btn-ctrl">🔄 Return Mode</button>
         <button id="removeLineBtn" class="btn-ctrl btn-danger-custom">🗑️ Remove Line</button>
@@ -158,6 +160,7 @@
         
         let isAddPlaceMode = false;
         let isFirstLocationFound = false;
+        let is3DMode = false;
         
         let currentCoords = null;
         let lastValidCoords = null;
@@ -224,26 +227,30 @@
 
         function onLocationUpdate(position) {
             const accuracy = position.coords.accuracy;
-            if (accuracy > 35) return; 
+            // Strict GPS and Anti-Teleport Filter
+            if (accuracy > 30) return; 
 
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            currentCoords = [lat, lng];
+            const newCoords = [lat, lng];
 
             let rawSpeed = position.coords.speed || 0;
             let speedKmh = rawSpeed * 3.6;
 
             if (!isFirstLocationFound) {
                 isFirstLocationFound = true;
-                lastValidCoords = currentCoords;
+                lastValidCoords = newCoords;
+                currentCoords = newCoords;
                 loader.classList.add('hidden');
                 map.setView(currentCoords, 19);
                 userMarker = L.marker(currentCoords, { icon: createEmojiIcon(currentEmoji), zIndexOffset: 1000 }).addTo(map);
                 return; 
             }
 
-            let moveDist = getDistance(lastValidCoords, currentCoords);
+            let moveDist = getDistance(lastValidCoords, newCoords);
             
+            // Anti-Teleport & Stationary Drift Lock
+            // Agar speed kam hai aur movement choti hai, to location bilkul nahi hilegi (No Random TP)
             if (speedKmh < 1.5 && moveDist < 4) {
                 document.getElementById('speedVal').innerText = "0.0";
                 updateAvatarBySpeed(0);
@@ -251,7 +258,11 @@
                 return; 
             }
 
-            if (moveDist > 100 && speedKmh < 50) return; 
+            // Fake Teleport Jump Guard: Agar achanak 100 meter door jump kare bina waja to reject kar do
+            if (moveDist > 100 && speedKmh < 40) return; 
+
+            lastValidCoords = newCoords;
+            currentCoords = newCoords;
 
             document.getElementById('speedVal').innerText = speedKmh.toFixed(1);
             updateAvatarBySpeed(speedKmh);
@@ -262,7 +273,6 @@
             }
 
             if (moveDist >= 3) { 
-                lastValidCoords = currentCoords;
                 userMarker.setLatLng(currentCoords);
 
                 if (!isLineFormed) {
@@ -379,6 +389,22 @@
             return { minDist, minIndex };
         }
 
+        // 3D Tilt Vision Toggle (Jaise screenshot mein 3D angle hota hai)
+        document.getElementById('toggle3dBtn').addEventListener('click', () => {
+            is3DMode = !is3DMode;
+            let mapContainer = document.getElementById('map');
+            if (is3DMode) {
+                mapContainer.style.transform = "perspective(600px) rotateX(45deg)";
+                mapContainer.style.transformOrigin = "bottom center";
+                document.getElementById('toggle3dBtn').innerText = "🌐 3D Vision: ON";
+                document.getElementById('toggle3dBtn').style.background = "#7c3aed";
+            } else {
+                mapContainer.style.transform = "none";
+                document.getElementById('toggle3dBtn').innerText = "🌐 3D Vision: OFF";
+                document.getElementById('toggle3dBtn').style.background = "#8b5cf6";
+            }
+        });
+
         document.getElementById('addPlaceBtn').addEventListener('click', () => {
             isAddPlaceMode = !isAddPlaceMode;
             document.getElementById('addPlaceBtn').innerText = isAddPlaceMode ? "📍 Click Map" : "📍 Add Place";
@@ -413,4 +439,4 @@
         });
     </script>
 </body>
-    </html>
+            </html>
