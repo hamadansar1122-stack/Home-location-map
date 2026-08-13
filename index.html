@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Precision GPS Tracker</title>
+    <title>Car GPS Tracker</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * {
@@ -208,7 +208,7 @@
         
         let pathHistory = [];
         let trackedDots = []; 
-        let dotColorToggle = false; // Toggle between Green and Red
+        let dotColorToggle = false; 
         
         let isAddHomeMode = false;
         let isFirstLocationFound = false;
@@ -247,7 +247,6 @@
                 subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
             }).addTo(map);
 
-            // Manual Home Placement on Map Click
             map.on('click', (e) => {
                 if (isAddHomeMode) {
                     setHomeLocation([e.latlng.lat, e.latlng.lng]);
@@ -284,11 +283,16 @@
             );
         }
 
+        function clearAllDots() {
+            trackedDots.forEach(item => map.removeLayer(item.layer));
+            trackedDots = [];
+            pathHistory = [];
+        }
+
         function onLocationUpdate(position) {
             const accuracy = position.coords.accuracy;
             document.getElementById('accVal').innerText = Math.round(accuracy);
 
-            // Strict Filter for starting accuracy
             if (accuracy > 20) return;
 
             const lat = position.coords.latitude;
@@ -304,16 +308,25 @@
                 loader.classList.add('hidden');
                 
                 map.setView(currentCoords, 19);
-                userMarker = L.marker(currentCoords, { icon: createEmojiIcon('🚶‍♂️'), zIndexOffset: 1000 }).addTo(map);
+                // Car Emoji 🚗 set for current position
+                userMarker = L.marker(currentCoords, { icon: createEmojiIcon('🚗'), zIndexOffset: 1000 }).addTo(map);
                 return; 
+            }
+
+            // Check if Car is touching Home
+            if (homeCoords) {
+                let distToHome = getDistance(currentCoords, homeCoords);
+                if (distToHome <= 15) { // Touched Home Emoji area
+                    clearAllDots();
+                }
             }
 
             let moveDist = getDistance(lastValidCoords, currentCoords);
 
-            // Backtracking logic
+            // Backtracking logic: If car returns on previous dots, remove them
             handleBacktrackingDots(currentCoords);
 
-            // Add Red/Green Dot if moved 4 meters away
+            // Add Red/Green Dot if moved 4 meters
             if (moveDist >= 4) {
                 totalDistance += moveDist;
                 document.getElementById('distVal').innerText = Math.round(totalDistance);
@@ -332,7 +345,6 @@
         function addAlternatingDot(coords) {
             pathHistory.push(coords);
             
-            // Alternates between Green and Red
             let dotColor = dotColorToggle ? '#22c55e' : '#ef4444'; 
             dotColorToggle = !dotColorToggle;
 
@@ -350,9 +362,10 @@
         function handleBacktrackingDots(newCoords) {
             if (pathHistory.length < 2) return;
 
+            // Check if car is near older dots and remove future ones
             for (let i = pathHistory.length - 2; i >= 0; i--) {
                 let distToOldDot = getDistance(newCoords, pathHistory[i]);
-                if (distToOldDot < 6) {
+                if (distToOldDot < 6) { // If vehicle crosses back over old dot
                     for (let j = pathHistory.length - 1; j > i; j--) {
                         map.removeLayer(trackedDots[j].layer);
                     }
@@ -369,7 +382,6 @@
             
             homeMarker = L.marker(homeCoords, { icon: createEmojiIcon('🏠') }).addTo(map);
             
-            // Delete / Cancel options on clicking Home Emoji
             homeMarker.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
                 document.getElementById('deleteHomeModal').classList.remove('hidden');
@@ -415,7 +427,6 @@
 
         function onLocationError(err) { console.log(err); }
 
-        // Button Listeners
         document.getElementById('addHomeBtn').addEventListener('click', () => {
             isAddHomeMode = !isAddHomeMode;
             if (isAddHomeMode) {
@@ -435,7 +446,6 @@
             if (currentCoords) map.setView(currentCoords, 19, { animate: true });
         });
 
-        // Quick Home Modal Actions
         document.getElementById('quickYesBtn').addEventListener('click', () => {
             if (currentCoords) setHomeLocation(currentCoords);
             document.getElementById('quickHomeModal').classList.add('hidden');
@@ -444,7 +454,6 @@
             document.getElementById('quickHomeModal').classList.add('hidden');
         });
 
-        // Delete Home Modal Actions
         document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
             document.getElementById('deleteHomeModal').classList.add('hidden');
         });
@@ -466,4 +475,4 @@
         }
     </script>
 </body>
-        </html>
+    </html>
