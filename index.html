@@ -61,6 +61,31 @@
             font-size: 13px;
         }
 
+        /* Home Direction Indicator Box */
+        .home-pointer-box {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 2000;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            padding: 10px 14px;
+            border-radius: 10px;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .arrow-icon {
+            font-size: 20px;
+            display: inline-block;
+            transition: transform 0.2s ease-out;
+        }
+
         .hud-panel {
             position: absolute;
             bottom: 25px;
@@ -114,7 +139,6 @@
         .modal-card p { color: #4b5563; font-size: 14px; margin-bottom: 20px; }
         .btn-group { display: flex; gap: 10px; justify-content: center; }
         .btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        .btn-danger { background-color: #ef4444; color: white; }
         .btn-secondary { background-color: #e5e7eb; color: #374151; }
         .btn-primary { background-color: #2563eb; color: white; }
         .hidden { display: none !important; }
@@ -124,15 +148,24 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <p id="loaderText">Calibrating High-Precision GPS...</p>
+        <p id="loaderText">Connecting to High-Precision GPS...</p>
     </div>
 
     <div id="map"></div>
 
+    <!-- Home Direction Box -->
+    <div id="homePointer" class="home-pointer-box hidden">
+        <span id="homeArrow" class="arrow-icon">⬆️</span>
+        <div>
+            <div>Home Direction</div>
+            <div style="font-size: 11px; color: #f87171;" id="homeDistText">0 m away</div>
+        </div>
+    </div>
+
     <div class="hud-panel">
         <div class="hud-item">Speed: <span id="speedVal" class="hud-value">0.0</span> km/h</div>
         <div class="hud-item">Distance: <span id="distVal" class="hud-value">0</span> m</div>
-        <div class="hud-item">GPS Accuracy: <span id="accVal" class="hud-value">--</span> m</div>
+        <div class="hud-item">Accuracy: <span id="accVal" class="hud-value">--</span> m</div>
     </div>
 
     <div class="top-controls">
@@ -156,9 +189,12 @@
     <script>
         let map = null;
         let userMarker = null;
+        let homeCoords = null;
+        let homeMarker = null;
+        
         let pathHistory = [];
-        let dotMarkers = [];
-        let polyline = null;
+        let redDots = []; // Array to store red dot objects
+        
         let isAddHomeMode = false;
         let isFirstLocationFound = false;
         let currentCoords = null;
@@ -198,7 +234,7 @@
 
             map.on('click', (e) => {
                 if (isAddHomeMode) {
-                    addHouseMarker(e.latlng);
+                    setHomeLocation(e.latlng);
                     isAddHomeMode = false;
                     document.getElementById('addHomeBtn').innerText = "🏠 Add Home";
                     document.getElementById('addHomeBtn').style.background = "rgba(0, 0, 0, 0.85)";
@@ -236,8 +272,7 @@
             const accuracy = position.coords.accuracy;
             document.getElementById('accVal').innerText = Math.round(accuracy);
 
-            // STRICT FILTER: Ignore bad signals (> 15 meters inaccuracy) to prevent rooftop jumps
-            if (accuracy > 15) return;
+            if (accuracy > 20) return; // Strict filter to avoid building jumps
 
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
@@ -250,6 +285,8 @@
                 isFirstLocationFound = true;
                 lastValidCoords = currentCoords;
                 loader.classList.add('hidden');
+                
+                // Auto Zoom-In initially
                 map.setView(currentCoords, 19);
                 document.getElementById('initHomeModal').classList.remove('hidden');
                 
@@ -257,52 +294,95 @@
                 return; 
             }
 
-            // Calculate distance moved from last known good position
             let moveDist = getDistance(lastValidCoords, currentCoords);
 
-            // Only update path if moved at least 5 meters (Prevents jitter while standing still)
-            if (moveDist >= 5) {
+            // Handle Backtracking Removal of Red Dots
+            handleBacktrackingDots(currentCoords);
+
+            // Add new Red Dot if moved 4 meters away from previous dot
+            if (moveDist >= 4) {
                 totalDistance += moveDist;
                 document.getElementById('distVal').innerText = Math.round(totalDistance);
                 
                 lastValidCoords = currentCoords;
                 userMarker.setLatLng(currentCoords);
-                map.panTo(currentCoords, { animate: true, duration: 0.5 });
                 
-                commitPathPoint(currentCoords);
+                addRedDot(currentCoords);
             } else {
-                // Smooth position adjustment for small movements
                 userMarker.setLatLng(currentCoords);
             }
+
+            // Update Home Direction Arrow
+            updateHomePointer();
         }
 
-        function commitPathPoint(coords) {
+        function addRedDot(coords) {
             pathHistory.push(coords);
             const dot = L.circleMarker(coords, {
                 radius: 4,
-                color: '#2563eb',
-                fillColor: '#60a5fa',
+                color: '#ef4444',
+                fillColor: '#f87171',
                 fillOpacity: 0.9,
                 stroke: false
             }).addTo(map);
 
-            dotMarkers.push(dot);
-
-            if (polyline) map.removeLayer(polyline);
-            polyline = L.polyline(pathHistory, {
-                color: '#2563eb',
-                weight: 4,
-                opacity: 0.8
-            }).addTo(map);
+            redDots.push({ coords: coords, layer: dot });
         }
 
-        function onLocationError(err) {
-            console.log(err);
+        function handleBacktrackingDots(newCoords) {
+            if (pathHistory.length < 2) return;
+
+            // Check if user returned to a previous dot position (within 6 meters)
+            for (let i = pathHistory.length - 2; i >= 0; i--) {
+                let distToOldDot = getDistance(newCoords, pathHistory[i]);
+                if (distToOldDot < 6) {
+                    // Remove all forward dots since user backtracked!
+                    for (let j = pathHistory.length - 1; j > i; j--) {
+                        map.removeLayer(redDots[j].layer);
+                    }
+                    pathHistory = pathHistory.slice(0, i + 1);
+                    redDots = redDots.slice(0, i + 1);
+                    break;
+                }
+            }
         }
 
-        function addHouseMarker(latlng) {
-            L.marker(latlng, { icon: createEmojiIcon('🏠') }).addTo(map);
+        function setHomeLocation(latlng) {
+            homeCoords = [latlng.lat, latlng.lng];
+            if (homeMarker) map.removeLayer(homeMarker);
+            homeMarker = L.marker(homeCoords, { icon: createEmojiIcon('🏠') }).addTo(map);
+            updateHomePointer();
         }
+
+        function updateHomePointer() {
+            if (!homeCoords || !currentCoords) return;
+
+            let distToHome = getDistance(currentCoords, homeCoords);
+            const pointerBox = document.getElementById('homePointer');
+
+            // Show arrow box if user is > 15 meters away from home
+            if (distToHome > 15) {
+                pointerBox.classList.remove('hidden');
+                document.getElementById('homeDistText').innerText = Math.round(distToHome) + " m away";
+
+                // Calculate angle from user to home
+                let angle = getBearing(currentCoords[0], currentCoords[1], homeCoords[0], homeCoords[1]);
+                document.getElementById('homeArrow').style.transform = `rotate(${angle}deg)`;
+            } else {
+                pointerBox.classList.add('hidden');
+            }
+        }
+
+        function getBearing(lat1, lon1, lat2, lon2) {
+            const rad = Math.PI / 180;
+            const y = Math.sin((lon2 - lon1) * rad) * Math.cos(lat2 * rad);
+            const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) -
+                      Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad);
+            const bearing = Math.atan2(y, x) * (180 / Math.PI);
+            return (bearing + 360) % 360;
+        }
+
+        function onLocationError(err) { console.log(err); }
 
         document.getElementById('addHomeBtn').addEventListener('click', () => {
             isAddHomeMode = !isAddHomeMode;
@@ -314,7 +394,7 @@
         });
 
         document.getElementById('initYesBtn').addEventListener('click', () => {
-            if (currentCoords) addHouseMarker(currentCoords);
+            if (currentCoords) setHomeLocation({ lat: currentCoords[0], lng: currentCoords[1] });
             document.getElementById('initHomeModal').classList.add('hidden');
         });
         document.getElementById('initNoBtn').addEventListener('click', () => {
@@ -334,4 +414,4 @@
         }
     </script>
 </body>
-    </html>
+        </html>
