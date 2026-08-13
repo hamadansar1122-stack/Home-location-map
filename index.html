@@ -114,6 +114,7 @@
             user-select: none;
             filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.6));
             transition: all 0.3s linear;
+            cursor: pointer;
         }
 
         .modal-overlay {
@@ -169,17 +170,18 @@
 
     <div class="top-controls">
         <button id="addHomeBtn" class="btn-ctrl">🏠 Add Home</button>
+        <button id="quickHomeBtn" class="btn-ctrl">📍 Quick Home</button>
         <button id="recenterBtn" class="btn-ctrl">🎯 Recenter</button>
     </div>
 
-    <!-- Initial Set Home Dialog -->
-    <div id="initHomeModal" class="modal-overlay hidden">
+    <!-- Quick Home Modal -->
+    <div id="quickHomeModal" class="modal-overlay hidden">
         <div class="modal-card">
-            <h3>Welcome! 🏠</h3>
-            <p>Set your current real-time location as Home?</p>
+            <h3>Set Home 🏠</h3>
+            <p>Are you currently sitting at your home?</p>
             <div class="btn-group">
-                <button id="initNoBtn" class="btn btn-secondary">No</button>
-                <button id="initYesBtn" class="btn btn-primary">Yes, Set Home</button>
+                <button id="quickNoBtn" class="btn btn-secondary">No</button>
+                <button id="quickYesBtn" class="btn btn-primary">Yes, Set Home</button>
             </div>
         </div>
     </div>
@@ -205,7 +207,8 @@
         let homeMarker = null;
         
         let pathHistory = [];
-        let whiteDots = []; 
+        let trackedDots = []; 
+        let dotColorToggle = false; // Toggle between Green and Red
         
         let isAddHomeMode = false;
         let isFirstLocationFound = false;
@@ -244,6 +247,7 @@
                 subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
             }).addTo(map);
 
+            // Manual Home Placement on Map Click
             map.on('click', (e) => {
                 if (isAddHomeMode) {
                     setHomeLocation([e.latlng.lat, e.latlng.lng]);
@@ -284,8 +288,8 @@
             const accuracy = position.coords.accuracy;
             document.getElementById('accVal').innerText = Math.round(accuracy);
 
-            // Strict Filter: Only accept accurate GPS points (<15m) to avoid starting at wrong places
-            if (accuracy > 15) return;
+            // Strict Filter for starting accuracy
+            if (accuracy > 20) return;
 
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
@@ -300,18 +304,16 @@
                 loader.classList.add('hidden');
                 
                 map.setView(currentCoords, 19);
-                document.getElementById('initHomeModal').classList.remove('hidden');
-                
                 userMarker = L.marker(currentCoords, { icon: createEmojiIcon('🚶‍♂️'), zIndexOffset: 1000 }).addTo(map);
                 return; 
             }
 
             let moveDist = getDistance(lastValidCoords, currentCoords);
 
-            // Backtracking logic for White Dots
+            // Backtracking logic
             handleBacktrackingDots(currentCoords);
 
-            // Add WHITE Dot if moved 4 meters away
+            // Add Red/Green Dot if moved 4 meters away
             if (moveDist >= 4) {
                 totalDistance += moveDist;
                 document.getElementById('distVal').innerText = Math.round(totalDistance);
@@ -319,7 +321,7 @@
                 lastValidCoords = currentCoords;
                 userMarker.setLatLng(currentCoords);
                 
-                addWhiteDot(currentCoords);
+                addAlternatingDot(currentCoords);
             } else {
                 userMarker.setLatLng(currentCoords);
             }
@@ -327,17 +329,22 @@
             updateHomePointer();
         }
 
-        function addWhiteDot(coords) {
+        function addAlternatingDot(coords) {
             pathHistory.push(coords);
+            
+            // Alternates between Green and Red
+            let dotColor = dotColorToggle ? '#22c55e' : '#ef4444'; 
+            dotColorToggle = !dotColorToggle;
+
             const dot = L.circleMarker(coords, {
                 radius: 4.5,
-                color: '#ffffff',
-                fillColor: '#ffffff',
-                fillOpacity: 0.95,
+                color: dotColor,
+                fillColor: dotColor,
+                fillOpacity: 0.9,
                 stroke: false
             }).addTo(map);
 
-            whiteDots.push({ coords: coords, layer: dot });
+            trackedDots.push({ coords: coords, layer: dot });
         }
 
         function handleBacktrackingDots(newCoords) {
@@ -347,10 +354,10 @@
                 let distToOldDot = getDistance(newCoords, pathHistory[i]);
                 if (distToOldDot < 6) {
                     for (let j = pathHistory.length - 1; j > i; j--) {
-                        map.removeLayer(whiteDots[j].layer);
+                        map.removeLayer(trackedDots[j].layer);
                     }
                     pathHistory = pathHistory.slice(0, i + 1);
-                    whiteDots = whiteDots.slice(0, i + 1);
+                    trackedDots = trackedDots.slice(0, i + 1);
                     break;
                 }
             }
@@ -362,7 +369,7 @@
             
             homeMarker = L.marker(homeCoords, { icon: createEmojiIcon('🏠') }).addTo(map);
             
-            // Add Click Listener to Home Emoji for Cancel / Delete Options
+            // Delete / Cancel options on clicking Home Emoji
             homeMarker.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
                 document.getElementById('deleteHomeModal').classList.remove('hidden');
@@ -408,24 +415,36 @@
 
         function onLocationError(err) { console.log(err); }
 
+        // Button Listeners
         document.getElementById('addHomeBtn').addEventListener('click', () => {
             isAddHomeMode = !isAddHomeMode;
-            document.getElementById('addHomeBtn').innerText = isAddHomeMode ? "📍 Click Map" : "🏠 Add Home";
+            if (isAddHomeMode) {
+                document.getElementById('addHomeBtn').innerText = "📍 Click Map Position";
+                document.getElementById('addHomeBtn').style.background = "#2563eb";
+            } else {
+                document.getElementById('addHomeBtn').innerText = "🏠 Add Home";
+                document.getElementById('addHomeBtn').style.background = "rgba(0, 0, 0, 0.85)";
+            }
+        });
+
+        document.getElementById('quickHomeBtn').addEventListener('click', () => {
+            document.getElementById('quickHomeModal').classList.remove('hidden');
         });
 
         document.getElementById('recenterBtn').addEventListener('click', () => {
             if (currentCoords) map.setView(currentCoords, 19, { animate: true });
         });
 
-        document.getElementById('initYesBtn').addEventListener('click', () => {
+        // Quick Home Modal Actions
+        document.getElementById('quickYesBtn').addEventListener('click', () => {
             if (currentCoords) setHomeLocation(currentCoords);
-            document.getElementById('initHomeModal').classList.add('hidden');
+            document.getElementById('quickHomeModal').classList.add('hidden');
         });
-        document.getElementById('initNoBtn').addEventListener('click', () => {
-            document.getElementById('initHomeModal').classList.add('hidden');
+        document.getElementById('quickNoBtn').addEventListener('click', () => {
+            document.getElementById('quickHomeModal').classList.add('hidden');
         });
 
-        // Cancel & Delete Modal Controls
+        // Delete Home Modal Actions
         document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
             document.getElementById('deleteHomeModal').classList.add('hidden');
         });
@@ -447,4 +466,4 @@
         }
     </script>
 </body>
-                </html>
+        </html>
