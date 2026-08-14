@@ -3,120 +3,232 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hamid's Smart 3D Avatar GPS Tracker - Part 1</title>
+    <title>Hamid's Smart GPS Tracker - Part 1</title>
+    
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
     <style>
         /* =========================================================
            1. CORE STYLING
            ========================================================= */
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
-        html, body, #map { width: 100%; height: 100%; overflow: hidden; background-color: #0b0f19; }
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+            font-family: 'Segoe UI', Tahoma, sans-serif; 
+        }
         
-        /* Smooth 3D Transition for Map */
-        #map { 
-            transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1); 
-            transform-origin: bottom center; 
+        html, body, #map { 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background-color: #0b0f19; 
         }
         
         #loader {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #0b0f19; color: #fff; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 99999; font-weight: 600; text-align: center; padding: 20px;
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: #0b0f19; 
+            color: #fff; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: center; 
+            align-items: center; 
+            z-index: 99999; 
+            font-weight: 600; 
+            text-align: center; 
+            padding: 20px;
         }
+
         .spinner {
-            border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #38bdf8;
-            border-radius: 50%; width: 45px; height: 45px; animation: spin 0.8s linear infinite; margin-bottom: 15px;
+            border: 4px solid rgba(255,255,255,0.1); 
+            border-top: 4px solid #38bdf8;
+            border-radius: 50%; 
+            width: 45px; 
+            height: 45px; 
+            animation: spin 0.8s linear infinite; 
+            margin-bottom: 15px;
         }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
 
         /* =========================================================
-           2. 3D EMOJI AVATARS, FEET ANCHOR & COMPASS
+           2. CURRENT LOCATION BLUE DOT (GOOGLE MAPS STYLE)
            ========================================================= */
-        .emoji-marker { 
-            text-align: center; line-height: 1; 
-            filter: drop-shadow(0px 8px 10px rgba(0,0,0,0.8)); cursor: pointer; 
-        }
-        
-        /* The main wrapper that handles compass rotation */
-        .marker-container {
-            position: relative;
-            width: 60px; height: 60px;
-            display: flex; justify-content: center; align-items: flex-end; /* Align to bottom (feet) */
+        .user-marker-wrapper {
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
         }
 
-        /* Direction arrow indicating where the phone is pointing */
-        .direction-ring {
-            position: absolute;
-            bottom: -10px; 
-            font-size: 20px;
-            color: #38bdf8;
-            transition: transform 0.1s linear;
-            text-shadow: 0 0 5px #000;
+        .user-blue-dot {
+            width: 26px;
+            height: 26px;
+            background: #3b82f6;
+            border: 4px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.9), 0 0 0 8px rgba(59, 130, 246, 0.3);
+            animation: pulse-dot 2s infinite;
         }
 
-        /* The emoji itself */
-        .emoji-wrapper {
-            font-size: 38px;
-            display: inline-block;
-            transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
-            transform-origin: bottom center; /* Feet act as the pivot point */
-            position: relative;
-            z-index: 2;
+        @keyframes pulse-dot {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
+            70% { box-shadow: 0 0 0 14px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
 
-        /* When 3D Mode is Active */
-        body.mode-3d .emoji-wrapper {
-            transform: rotateX(-50deg) translateY(-10px) scale(1.3);
-        }
-
-        /* Hovering Home Indicator */
+        /* Home Indicator */
         .home-indicator {
-            font-size: 45px !important;
+            font-size: 40px !important;
             animation: floatUpDown 2s infinite ease-in-out;
             text-align: center;
         }
+
         .home-tag {
-            display: block; font-size: 14px; background: rgba(34, 197, 94, 0.9);
-            color: white; padding: 4px 8px; border-radius: 10px; font-weight: bold;
-            margin-top: 5px; border: 1px solid white;
+            display: block; 
+            font-size: 13px; 
+            background: rgba(34, 197, 94, 0.9);
+            color: white; 
+            padding: 2px 6px; 
+            border-radius: 8px; 
+            font-weight: bold;
+            margin-top: 3px; 
+            border: 1px solid white;
         }
 
         @keyframes floatUpDown {
             0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-15px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* Destination Pin */
+        .dest-pin { 
+            font-size: 38px; 
+            text-align: center; 
+            line-height: 1; 
+            filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5)); 
         }
 
         /* =========================================================
            3. UI CONTROLS & HUD
            ========================================================= */
+        .top-search-bar {
+            position: absolute; 
+            top: 15px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            z-index: 2000;
+            display: flex; 
+            gap: 8px; 
+            width: 90%; 
+            max-width: 400px;
+        }
+
+        .top-search-bar input {
+            flex: 1; 
+            padding: 12px 15px; 
+            border-radius: 10px; 
+            border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(15, 23, 42, 0.95); 
+            color: white; 
+            font-size: 14px; 
+            outline: none;
+        }
+
+        .top-search-bar button {
+            background: #2563eb; 
+            color: white; 
+            border: none; 
+            padding: 0 15px;
+            border-radius: 10px; 
+            font-weight: bold; 
+            cursor: pointer;
+        }
+
         .top-controls {
-            position: absolute; top: 15px; right: 15px; z-index: 2000;
-            display: flex; flex-direction: column; gap: 8px; max-height: 90vh; overflow-y: auto;
+            position: absolute; 
+            top: 75px; 
+            right: 15px; 
+            z-index: 2000;
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+            max-height: 80vh; 
+            overflow-y: auto;
         }
+
         .btn-ctrl {
-            background: rgba(15, 23, 42, 0.92); color: #fff; border: 1px solid rgba(255,255,255,0.15);
-            padding: 11px 15px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 13px; text-align: center;
+            background: rgba(15, 23, 42, 0.92); 
+            color: #fff; 
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 11px 15px; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            font-size: 13px; 
+            text-align: center;
         }
+
         .btn-highlight { background: #22c55e; border: none; }
         .btn-danger-custom { background: #ef4444; border: none; }
-        .btn-3d { background: #8b5cf6; border: none; }
         .btn-home { background: #2563eb; border: none; }
 
         .hud-panel {
-            position: absolute; bottom: 25px; left: 15px; z-index: 2000;
-            background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(255,255,255,0.15);
-            padding: 14px 20px; border-radius: 14px; color: white; min-width: 150px;
+            position: absolute; 
+            bottom: 25px; 
+            left: 15px; 
+            z-index: 2000;
+            background: rgba(15, 23, 42, 0.92); 
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 14px 20px; 
+            border-radius: 14px; 
+            color: white; 
+            min-width: 180px;
         }
-        .hud-item { font-size: 13px; margin-bottom: 5px; display: flex; justify-content: space-between; gap: 15px; }
+
+        .hud-item { 
+            font-size: 13px; 
+            margin-bottom: 5px; 
+            display: flex; 
+            justify-content: space-between; 
+            gap: 15px; 
+        }
+
         .hud-value { font-weight: 700; color: #38bdf8; }
+        .eta-value { color: #f59e0b; }
 
         .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.75); display: flex; justify-content: center; align-items: center; z-index: 99999;
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: rgba(0,0,0,0.75); 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            z-index: 99999;
         }
+
         .modal-card {
-            background: #fff; padding: 24px; border-radius: 16px; width: 85%; max-width: 380px; text-align: center; color: #111827;
+            background: #fff; 
+            padding: 24px; 
+            border-radius: 16px; 
+            width: 85%; 
+            max-width: 380px; 
+            text-align: center; 
+            color: #111827;
         }
+
         .modal-card h3 { margin-bottom: 10px; font-size: 20px; font-weight: 700; }
         .modal-card p { color: #4b5563; font-size: 14px; margin-bottom: 20px; }
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
@@ -127,52 +239,43 @@
         .btn-place { background-color: #f3f4f6; border: 1px solid #d1d5db; padding: 12px; width: 46%; }
         .hidden { display: none !important; }
 
-        .bottom-selector {
-            position: absolute; bottom: 25px; right: 15px; z-index: 2000;
-            background: rgba(15, 23, 42, 0.92); padding: 10px 14px; border-radius: 10px; color: white; font-size: 12px;
-            border: 1px solid rgba(255,255,255,0.15);
-        }
-        .bottom-selector select {
-            background: #1e293b; color: #fff; border: 1px solid #475569; padding: 6px; border-radius: 6px; margin-top: 4px; width: 100%; outline: none;
-        }
+        .leaflet-routing-container { display: none !important; }
     </style>
 </head>
 <body>
 
+    <!-- Loader -->
     <div id="loader">
         <div class="spinner"></div>
-        <p>Hamid Bhai: Starting 3D Avatar Engine & Locking GPS...</p>
+        <p>Please turn on your GPS...</p>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="top-search-bar">
+        <input type="text" id="searchInput" placeholder="Search destination...">
+        <button onclick="searchLocation()">🔍 Go</button>
     </div>
 
     <div id="map"></div>
 
+    <!-- Stats HUD -->
     <div class="hud-panel">
         <div class="hud-item">Speed: <span id="speedVal" class="hud-value">0.0</span> km/h</div>
-        <div class="hud-item">Status: <span id="modeVal" class="hud-value" style="color: #22c55e;">Locked on Road 🛣️</span></div>
+        <div class="hud-item">ETA: <span id="etaVal" class="hud-value eta-value">--</span></div>
+        <div class="hud-item">Distance: <span id="distVal" class="hud-value">--</span></div>
+        <div class="hud-item">Status: <span id="modeVal" class="hud-value" style="color: #22c55e;">Active 🛣️</span></div>
     </div>
 
     <div class="top-controls">
         <button id="addPlaceBtn" class="btn-ctrl">📍 Add Place</button>
         <button id="makeLineBtn" class="btn-ctrl btn-highlight">📏 Make Line</button>
-        <button id="toggle3dBtn" class="btn-ctrl btn-3d">🌐 3D Avatar Vision: OFF</button>
         <button id="goHomeTriggerBtn" class="btn-ctrl btn-home">🏠 Track Home</button>
         <button id="manualReturnBtn" class="btn-ctrl">🔄 Return Mode</button>
         <button id="removeLineBtn" class="btn-ctrl btn-danger-custom">🗑️ Clear Paths</button>
         <button id="recenterBtn" class="btn-ctrl">🎯 Recenter</button>
     </div>
 
-    <div class="bottom-selector">
-        <div>Avatar Mode:</div>
-        <select id="manualAvatarSelect">
-            <option value="auto">⚡ Auto Speed Mode</option>
-            <option value="🚶">🧍 Person</option>
-            <option value="🚲">🚲 Bicycle</option>
-            <option value="🏍️">🏍️ Motorcycle</option>
-            <option value="🚗">🚗 Car</option>
-        </select>
-    </div>
-
-    <!-- Modals (Place Type, Action, Return) -->
+    <!-- Modals -->
     <div id="placeTypeModal" class="modal-overlay hidden">
         <div class="modal-card">
             <h3>Select Place Type</h3>
@@ -207,10 +310,14 @@
                 <button id="returnYesBtn" class="btn btn-primary" style="background:#22c55e; width: 46%;">Yes, Return</button>
             </div>
         </div>
-        </div>
-                <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    </div>
+
+    <!-- Leaflet & Routing JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
     <script>
-        let map, userMarker;
+        let map, userMarker, routingControl;
         let places = []; 
         let selectedPlaceId = null;
         let pendingPlaceCoords = null;
@@ -226,13 +333,9 @@
         let isReturningMode = false;
         let isAddPlaceMode = false;
         let isFirstLocationFound = false;
-        let is3DMode = false;
         
         let currentCoords = null;
         let lastValidCoords = null;
-        let currentEmoji = '🏍️'; 
-        let manualAvatarChoice = 'auto';
-        let currentHeading = 0; // Device compass direction
 
         const loader = document.getElementById('loader');
 
@@ -240,50 +343,16 @@
             initializeMapEnvironment();
             initializeBackgroundGeolocationWatcher();
             initializeEventListeners();
-            requestWakeLock(); // Start screen lock immediately
+            requestWakeLock();
         });
 
-        // ==========================================
-        // WAKE LOCK API: Keep Screen On for Tracking
-        // ==========================================
-        let wakeLock = null;
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('Screen is locked ON for background tracking.');
+                    await navigator.wakeLock.request('screen');
                 }
             } catch (err) {
-                console.log(`Wake Lock Error: ${err.name}, ${err.message}`);
-            }
-        }
-        document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible') {
-                requestWakeLock();
-            }
-        });
-
-        // ==========================================
-        // DEVICE COMPASS SENSOR (Rotation)
-        // ==========================================
-        window.addEventListener("deviceorientationabsolute", (event) => {
-            if (event.alpha !== null) {
-                // Calculate compass heading
-                currentHeading = 360 - event.alpha;
-                updateAvatarRotation();
-            }
-        }, true);
-
-        function updateAvatarRotation() {
-            if (userMarker) {
-                const el = userMarker.getElement();
-                if (el) {
-                    const arrowRing = el.querySelector('.direction-ring');
-                    if (arrowRing) {
-                        // Rotate the arrow indicator beneath the feet
-                        arrowRing.style.transform = `rotate(${currentHeading}deg)`;
-                    }
-                }
+                console.log(`Wake Lock Error: ${err.message}`);
             }
         }
 
@@ -291,7 +360,7 @@
             map = L.map('map', { zoomControl: false, maxZoom: 20, minZoom: 5 }).setView([31.5204, 74.3587], 17);
 
             L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
-                maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: 'Hamid 3D Avatar Engine'
+                maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
             }).addTo(map);
 
             greenLine = L.polyline([], { color: '#22c55e', weight: 6, opacity: 0.9 }).addTo(map);
@@ -302,42 +371,29 @@
                     pendingPlaceCoords = [e.latlng.lat, e.latlng.lng];
                     document.getElementById('placeTypeModal').classList.remove('hidden');
                     isAddPlaceMode = false;
-                    document.getElementById('addPlaceBtn').innerText = "📍 Add Place";
+                    document.getElementById('addPlaceBtn').innerText = "📍 Tap Map Pin";
                     document.getElementById('addPlaceBtn').style.background = "rgba(15, 23, 42, 0.92)";
+                } else {
+                    calculateRouteToDestination(e.latlng);
                 }
             });
         }
 
-        // Updated function to handle EXACT FEET ANCHOR & ROTATION WRAPPER
-        function createEmojiMarkerIcon(emojiSymbol, typeName = 'Avatar') {
-            let innerHtml = `
-            <div class="marker-container">
-                <div class="direction-ring">⬆️</div>
-                <div class="emoji-wrapper">${emojiSymbol}</div>
-            </div>`;
-            
+        function createUserBlueDotIcon(typeName = 'Avatar') {
+            let innerHtml = `<div class="user-blue-dot"></div>`;
             if (typeName === 'Home') {
                 innerHtml = `<div class="home-indicator">🏠<span class="home-tag">My Home</span></div>`;
             }
 
             return L.divIcon({ 
-                className: 'emoji-marker', 
+                className: 'user-marker-wrapper', 
                 html: innerHtml, 
-                iconSize: [60, 60], 
-                iconAnchor: [30, 60] // <-- [Width Center, Bottom Edge] This puts the FEET exactly on the current location
+                iconSize: [26, 26], 
+                iconAnchor: [13, 13] 
             });
         }
 
         function initializeEventListeners() {
-            document.getElementById('manualAvatarSelect').addEventListener('change', (e) => {
-                manualAvatarChoice = e.target.value;
-                if (manualAvatarChoice !== 'auto') {
-                    currentEmoji = manualAvatarChoice;
-                    if(userMarker) userMarker.setIcon(createEmojiMarkerIcon(currentEmoji));
-                }
-            });
-
-            document.getElementById('toggle3dBtn').addEventListener('click', toggle3DTiltVision);
             document.getElementById('addPlaceBtn').addEventListener('click', toggleAddPlaceMode);
             document.getElementById('makeLineBtn').addEventListener('click', convertDotsToSolidLine);
             document.getElementById('goHomeTriggerBtn').addEventListener('click', openReturnModal);
@@ -359,7 +415,7 @@
 
         function handleNewGPSPositionUpdate(position) {
             const gpsAccuracy = position.coords.accuracy;
-            if (gpsAccuracy > 30) return; // Ignore very bad signals (like when sitting deep inside a house)
+            if (gpsAccuracy > 40) return; 
 
             const latitudeValue = position.coords.latitude;
             const longitudeValue = position.coords.longitude;
@@ -372,7 +428,7 @@
                 currentCoords = newCoordinateTuple;
                 loader.classList.add('hidden');
                 map.setView(currentCoords, 19, { animate: false });
-                userMarker = L.marker(currentCoords, { icon: createEmojiMarkerIcon(currentEmoji), zIndexOffset: 2000 }).addTo(map);
+                userMarker = L.marker(currentCoords, { icon: createUserBlueDotIcon(), zIndexOffset: 2000 }).addTo(map);
                 return; 
             }
 
@@ -381,7 +437,6 @@
 
             if (speedInKmh < 1.0 && distanceMovedMeters < 2.5) {
                 document.getElementById('speedVal').innerText = "0.0";
-                updateDynamicAvatarIcon(0);
                 return; 
             }
 
@@ -389,7 +444,6 @@
             currentCoords = newCoordinateTuple;
 
             document.getElementById('speedVal').innerText = speedInKmh.toFixed(1);
-            updateDynamicAvatarIcon(speedInKmh);
 
             if (distanceMovedMeters >= 2.0) { 
                 if (userMarker) userMarker.setLatLng(currentCoords);
@@ -400,20 +454,7 @@
                 }
             }
         }
-
-        function updateDynamicAvatarIcon(speedKmh) {
-            if (manualAvatarChoice !== 'auto') return;
-            let calculatedEmoji = '🧍';
-            if (speedKmh > 40) calculatedEmoji = '🚗';
-            else if (speedKmh > 15) calculatedEmoji = '🏍️';
-            else if (speedKmh > 4.0) calculatedEmoji = '🚲';
-
-            if (calculatedEmoji !== currentEmoji) {
-                currentEmoji = calculatedEmoji;
-                if (userMarker) userMarker.setIcon(createEmojiMarkerIcon(currentEmoji));
-            }
-        }
-
+        // PART 2 OF 2 (Continuation of script)
         function appendPathHistoryNode(coords) {
             pathHistory.push(coords);
             if (!isLineFormed) {
@@ -496,7 +537,7 @@
         function savePlace(emojiSymbol, typeName) {
             if (!pendingPlaceCoords) return;
             let uniquePlaceId = Date.now();
-            let placeMarkerInstance = L.marker(pendingPlaceCoords, { icon: createEmojiMarkerIcon(emojiSymbol, typeName) }).addTo(map);
+            let placeMarkerInstance = L.marker(pendingPlaceCoords, { icon: createUserBlueDotIcon(typeName) }).addTo(map);
             
             placeMarkerInstance.on('click', (eventClick) => {
                 L.DomEvent.stopPropagation(eventClick);
@@ -527,41 +568,101 @@
             closeModals();
         }
 
-        function toggle3DTiltVision() {
-            is3DMode = !is3DMode;
-            let mapDOMContainer = document.getElementById('map');
-            let tiltButton = document.getElementById('toggle3dBtn');
-            
-            if (is3DMode) {
-                mapDOMContainer.style.transform = "perspective(700px) rotateX(50deg)";
-                document.body.classList.add('mode-3d');
-                tiltButton.innerText = "🌐 3D Avatar Vision: ON";
-                tiltButton.style.background = "#7c3aed";
-            } else {
-                mapDOMContainer.style.transform = "none";
-                document.body.classList.remove('mode-3d');
-                tiltButton.innerText = "🌐 3D Avatar Vision: OFF";
-                tiltButton.style.background = "#8b5cf6";
+        // ==========================================
+        // SEARCH AND ROUTING LOGIC
+        // ==========================================
+        async function searchLocation() {
+            const query = document.getElementById('searchInput').value;
+            if (!query) return;
+
+            try {
+                let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
+                let data = await response.json();
+                if (data.length > 0) {
+                    let destLatLng = L.latLng(data[0].lat, data[0].lon);
+                    calculateRouteToDestination(destLatLng);
+                } else {
+                    alert("Location not found! Try a different spelling.");
+                }
+            } catch (err) {
+                console.error("Search failed:", err);
             }
         }
 
-        function openReturnModal() { document.getElementById('returnModal').classList.remove('hidden'); }
+        function calculateRouteToDestination(destLatLng) {
+            if (!isFirstLocationFound) {
+                alert("Please wait for your GPS location to load first.");
+                return;
+            }
+
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+
+            routingControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(currentCoords[0], currentCoords[1]),
+                    destLatLng
+                ],
+                routeWhileDragging: false,
+                addWaypoints: false,
+                lineOptions: {
+                    styles: [{color: '#3b82f6', weight: 6, opacity: 0.9}]
+                },
+                createMarker: function(i, waypoint, n) {
+                    if (i === n - 1) {
+                        return L.marker(waypoint.latLng, {
+                            icon: L.divIcon({ html: '📍', className: 'dest-pin', iconSize: [38, 38], iconAnchor: [19, 38] })
+                        });
+                    }
+                    return null;
+                }
+            }).on('routesfound', function(e) {
+                let routes = e.routes;
+                let summary = routes[0].summary;
+                
+                let totalSeconds = summary.totalTime;
+                let h = Math.floor(totalSeconds / 3600);
+                let m = Math.floor((totalSeconds % 3600) / 60);
+                let timeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+                
+                let distKm = (summary.totalDistance / 1000).toFixed(1);
+
+                document.getElementById('etaVal').innerText = timeStr;
+                document.getElementById('distVal').innerText = distKm + " km";
+            }).addTo(map);
+        }
+
+        function openReturnModal() { 
+            document.getElementById('returnModal').classList.remove('hidden'); 
+        }
+
         function executeReturnJourney() {
             isReturningMode = true;
             closeModals();
         }
+
         function closeModals() {
             document.getElementById('placeTypeModal').classList.add('hidden');
             document.getElementById('placeActionModal').classList.add('hidden');
             document.getElementById('returnModal').classList.add('hidden');
         }
+
         function clearEntireJourneyData() {
             resetEntireJourneyState();
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+                document.getElementById('etaVal').innerText = "--";
+                document.getElementById('distVal').innerText = "--";
+            }
             alert("All paths cleared successfully.");
         }
+
         function centerMapOnUser() {
             if (currentCoords) map.setView(currentCoords, 19, { animate: true });
         }
     </script>
 </body>
 </html>
+// (Part 1 ends here. Continue to Part 2 for remaining JavaScript functions)
