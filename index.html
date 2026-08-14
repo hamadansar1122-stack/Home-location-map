@@ -30,24 +30,43 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* =========================================================
-           2. 3D EMOJI AVATARS & HOVERING HOME
+           2. 3D EMOJI AVATARS, FEET ANCHOR & COMPASS
            ========================================================= */
         .emoji-marker { 
             text-align: center; line-height: 1; 
             filter: drop-shadow(0px 8px 10px rgba(0,0,0,0.8)); cursor: pointer; 
         }
         
-        /* The inner div holds the emoji. We counter-rotate it in 3D mode so it stands up! */
-        .emoji-marker div {
+        /* The main wrapper that handles compass rotation */
+        .marker-container {
+            position: relative;
+            width: 60px; height: 60px;
+            display: flex; justify-content: center; align-items: flex-end; /* Align to bottom (feet) */
+        }
+
+        /* Direction arrow indicating where the phone is pointing */
+        .direction-ring {
+            position: absolute;
+            bottom: -10px; 
+            font-size: 20px;
+            color: #38bdf8;
+            transition: transform 0.1s linear;
+            text-shadow: 0 0 5px #000;
+        }
+
+        /* The emoji itself */
+        .emoji-wrapper {
             font-size: 38px;
             display: inline-block;
             transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
-            transform-origin: bottom center;
+            transform-origin: bottom center; /* Feet act as the pivot point */
+            position: relative;
+            z-index: 2;
         }
 
-        /* When 3D Mode is Active (Class added to body) */
-        body.mode-3d .emoji-marker div {
-            transform: rotateX(-50deg) translateY(-20px) scale(1.3);
+        /* When 3D Mode is Active */
+        body.mode-3d .emoji-wrapper {
+            transform: rotateX(-50deg) translateY(-10px) scale(1.3);
         }
 
         /* Hovering Home Indicator */
@@ -153,12 +172,13 @@
         </select>
     </div>
 
+    <!-- Modals (Place Type, Action, Return) -->
     <div id="placeTypeModal" class="modal-overlay hidden">
         <div class="modal-card">
             <h3>Select Place Type</h3>
             <p>Assign a category to this location marker:</p>
             <div class="btn-group">
-                <button class="btn btn-place" onclick="savePlace('🏠', 'Home')">🏠 Home (Hovering)</button>
+                <button class="btn btn-place" onclick="savePlace('🏠', 'Home')">🏠 Home</button>
                 <button class="btn btn-place" onclick="savePlace('🕌', 'Mosque')">🕌 Mosque</button>
                 <button class="btn btn-place" onclick="savePlace('🏢', 'Office')">🏢 Office</button>
                 <button class="btn btn-place" onclick="savePlace('🏪', 'Shop')">🏪 Shop</button>
@@ -170,7 +190,6 @@
     <div id="placeActionModal" class="modal-overlay hidden">
         <div class="modal-card">
             <h3>Place Options <span id="actionPlaceEmoji"></span></h3>
-            <p>Select what action to perform on this marker:</p>
             <div class="btn-group">
                 <button id="startFromHereBtn" class="btn btn-primary" style="width: 100%;">Start Tracking From Here</button>
                 <button id="deletePlaceBtn" class="btn btn-danger" style="width: 100%;">Delete This Place</button>
@@ -188,8 +207,8 @@
                 <button id="returnYesBtn" class="btn btn-primary" style="background:#22c55e; width: 46%;">Yes, Return</button>
             </div>
         </div>
-            </div>
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        </div>
+                <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         let map, userMarker;
         let places = []; 
@@ -213,6 +232,7 @@
         let lastValidCoords = null;
         let currentEmoji = '🏍️'; 
         let manualAvatarChoice = 'auto';
+        let currentHeading = 0; // Device compass direction
 
         const loader = document.getElementById('loader');
 
@@ -220,12 +240,56 @@
             initializeMapEnvironment();
             initializeBackgroundGeolocationWatcher();
             initializeEventListeners();
+            requestWakeLock(); // Start screen lock immediately
         });
+
+        // ==========================================
+        // WAKE LOCK API: Keep Screen On for Tracking
+        // ==========================================
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen is locked ON for background tracking.');
+                }
+            } catch (err) {
+                console.log(`Wake Lock Error: ${err.name}, ${err.message}`);
+            }
+        }
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                requestWakeLock();
+            }
+        });
+
+        // ==========================================
+        // DEVICE COMPASS SENSOR (Rotation)
+        // ==========================================
+        window.addEventListener("deviceorientationabsolute", (event) => {
+            if (event.alpha !== null) {
+                // Calculate compass heading
+                currentHeading = 360 - event.alpha;
+                updateAvatarRotation();
+            }
+        }, true);
+
+        function updateAvatarRotation() {
+            if (userMarker) {
+                const el = userMarker.getElement();
+                if (el) {
+                    const arrowRing = el.querySelector('.direction-ring');
+                    if (arrowRing) {
+                        // Rotate the arrow indicator beneath the feet
+                        arrowRing.style.transform = `rotate(${currentHeading}deg)`;
+                    }
+                }
+            }
+        }
 
         function initializeMapEnvironment() {
             map = L.map('map', { zoomControl: false, maxZoom: 20, minZoom: 5 }).setView([31.5204, 74.3587], 17);
 
-            // Using satellite 3D-like view
             L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
                 maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: 'Hamid 3D Avatar Engine'
             }).addTo(map);
@@ -244,11 +308,14 @@
             });
         }
 
-        // Updated function to handle special "Home" hovering marker
+        // Updated function to handle EXACT FEET ANCHOR & ROTATION WRAPPER
         function createEmojiMarkerIcon(emojiSymbol, typeName = 'Avatar') {
-            let innerHtml = `<div>${emojiSymbol}</div>`;
+            let innerHtml = `
+            <div class="marker-container">
+                <div class="direction-ring">⬆️</div>
+                <div class="emoji-wrapper">${emojiSymbol}</div>
+            </div>`;
             
-            // If it's a Home marker, give it the special floating UI
             if (typeName === 'Home') {
                 innerHtml = `<div class="home-indicator">🏠<span class="home-tag">My Home</span></div>`;
             }
@@ -257,7 +324,7 @@
                 className: 'emoji-marker', 
                 html: innerHtml, 
                 iconSize: [60, 60], 
-                iconAnchor: [30, 30] 
+                iconAnchor: [30, 60] // <-- [Width Center, Bottom Edge] This puts the FEET exactly on the current location
             });
         }
 
@@ -292,12 +359,11 @@
 
         function handleNewGPSPositionUpdate(position) {
             const gpsAccuracy = position.coords.accuracy;
-            if (gpsAccuracy > 18) return; // Strict road lock filter
+            if (gpsAccuracy > 30) return; // Ignore very bad signals (like when sitting deep inside a house)
 
             const latitudeValue = position.coords.latitude;
             const longitudeValue = position.coords.longitude;
             const newCoordinateTuple = [latitudeValue, longitudeValue];
-
             let speedInKmh = (position.coords.speed || 0) * 3.6;
 
             if (!isFirstLocationFound) {
@@ -311,14 +377,11 @@
             }
 
             let distanceMovedMeters = calculateHaversineDistance(lastValidCoords, newCoordinateTuple);
-            if (distanceMovedMeters > 80) return; // Ignore teleports
+            if (distanceMovedMeters > 80) return; 
 
             if (speedInKmh < 1.0 && distanceMovedMeters < 2.5) {
                 document.getElementById('speedVal').innerText = "0.0";
                 updateDynamicAvatarIcon(0);
-                if (!isReturningMode && !isLineFormed) {
-                    document.getElementById('modeVal').innerText = "Locked on Road " + currentEmoji;
-                }
                 return; 
             }
 
@@ -327,11 +390,6 @@
 
             document.getElementById('speedVal').innerText = speedInKmh.toFixed(1);
             updateDynamicAvatarIcon(speedInKmh);
-            
-            if (!isLineFormed && !isReturningMode) {
-                document.getElementById('modeVal').innerText = "Tracking on Road " + currentEmoji;
-                document.getElementById('modeVal').style.color = "#38bdf8";
-            }
 
             if (distanceMovedMeters >= 2.0) { 
                 if (userMarker) userMarker.setLatLng(currentCoords);
@@ -372,7 +430,6 @@
             trackedDots = [];
             greenLine.setLatLngs(pathHistory);
             isLineFormed = true;
-            document.getElementById('modeVal').innerText = "Road Path Formed 🛣️";
         }
 
         function executeSmartReturnCleanupLogic(currentPositionCoords) {
@@ -390,11 +447,6 @@
                 redLine.setLatLngs([]);
                 pathHistory = pathHistory.slice(0, nearestIndex + 1);
                 greenLine.setLatLngs(pathHistory);
-                
-                if (pathHistory.length <= 2) {
-                    alert("Home reached successfully via road!");
-                    resetEntireJourneyState();
-                }
             }
         }
 
@@ -412,8 +464,6 @@
             clearAllWrongWayRedDots();
             isLineFormed = false;
             isReturningMode = false;
-            document.getElementById('modeVal').innerText = "Locked on Road " + currentEmoji;
-            document.getElementById('modeVal').style.color = "#22c55e";
         }
 
         function calculateHaversineDistance(coordA, coordB) {
@@ -477,21 +527,17 @@
             closeModals();
         }
 
-        // THE MAGIC 3D AVATAR TOGGLE
         function toggle3DTiltVision() {
             is3DMode = !is3DMode;
             let mapDOMContainer = document.getElementById('map');
             let tiltButton = document.getElementById('toggle3dBtn');
             
             if (is3DMode) {
-                // Tilt the map
                 mapDOMContainer.style.transform = "perspective(700px) rotateX(50deg)";
-                // Add class to body to make avatars stand up!
                 document.body.classList.add('mode-3d');
                 tiltButton.innerText = "🌐 3D Avatar Vision: ON";
                 tiltButton.style.background = "#7c3aed";
             } else {
-                // Revert to 2D
                 mapDOMContainer.style.transform = "none";
                 document.body.classList.remove('mode-3d');
                 tiltButton.innerText = "🌐 3D Avatar Vision: OFF";
@@ -502,8 +548,6 @@
         function openReturnModal() { document.getElementById('returnModal').classList.remove('hidden'); }
         function executeReturnJourney() {
             isReturningMode = true;
-            document.getElementById('modeVal').innerText = "Returning via Road 🚨";
-            document.getElementById('modeVal').style.color = "#ef4444";
             closeModals();
         }
         function closeModals() {
@@ -517,9 +561,7 @@
         }
         function centerMapOnUser() {
             if (currentCoords) map.setView(currentCoords, 19, { animate: true });
-            else alert("Acquiring accurate GPS road lock...");
         }
     </script>
 </body>
-    </html>
-    
+</html>
