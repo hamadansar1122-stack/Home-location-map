@@ -11,224 +11,74 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
 
     <style>
-        /* =========================================================
-           1. CORE STYLING
-           ========================================================= */
-        * { 
-            margin: 0; 
-            padding: 0; 
-            box-sizing: border-box; 
-            font-family: 'Segoe UI', Tahoma, sans-serif; 
-        }
-        
-        html, body, #map { 
-            width: 100%; 
-            height: 100%; 
-            overflow: hidden; 
-            background-color: #0b0f19; 
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        html, body, #map { width: 100%; height: 100%; overflow: hidden; background-color: #0b0f19; }
         
         #loader {
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%;
-            background: #0b0f19; 
-            color: #fff; 
-            display: flex; 
-            flex-direction: column;
-            justify-content: center; 
-            align-items: center; 
-            z-index: 99999; 
-            font-weight: 600; 
-            text-align: center; 
-            padding: 20px;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0b0f19; color: #fff; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 99999; font-weight: 600; text-align: center; padding: 20px;
         }
-
         .spinner {
-            border: 4px solid rgba(255,255,255,0.1); 
-            border-top: 4px solid #38bdf8;
-            border-radius: 50%; 
-            width: 45px; 
-            height: 45px; 
-            animation: spin 0.8s linear infinite; 
-            margin-bottom: 15px;
+            border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #38bdf8;
+            border-radius: 50%; width: 45px; height: 45px; animation: spin 0.8s linear infinite; margin-bottom: 15px;
         }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        @keyframes spin { 
-            0% { transform: rotate(0deg); } 
-            100% { transform: rotate(360deg); } 
-        }
-
-        /* =========================================================
-           2. CURRENT LOCATION BLUE DOT (GOOGLE MAPS STYLE)
-           ========================================================= */
-        .user-marker-wrapper {
-            display: flex; 
-            justify-content: center; 
-            align-items: center;
-        }
-
+        .user-marker-wrapper { display: flex; justify-content: center; align-items: center; }
         .user-blue-dot {
-            width: 26px;
-            height: 26px;
-            background: #3b82f6;
-            border: 4px solid #ffffff;
-            border-radius: 50%;
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.9), 0 0 0 8px rgba(59, 130, 246, 0.3);
+            width: 28px; height: 28px; background: #3b82f6; border: 4px solid #ffffff;
+            border-radius: 50%; box-shadow: 0 0 15px rgba(59, 130, 246, 0.9), 0 0 0 8px rgba(59, 130, 246, 0.3);
             animation: pulse-dot 2s infinite;
         }
-
         @keyframes pulse-dot {
             0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
             70% { box-shadow: 0 0 0 14px rgba(59, 130, 246, 0); }
             100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
 
-        /* Home Indicator */
-        .home-indicator {
-            font-size: 40px !important;
-            animation: floatUpDown 2s infinite ease-in-out;
-            text-align: center;
-        }
+        .home-indicator { font-size: 40px !important; animation: floatUpDown 2s infinite ease-in-out; text-align: center; }
+        .home-tag { display: block; font-size: 13px; background: rgba(34, 197, 94, 0.9); color: white; padding: 2px 6px; border-radius: 8px; font-weight: bold; margin-top: 3px; border: 1px solid white; }
+        @keyframes floatUpDown { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
 
-        .home-tag {
-            display: block; 
-            font-size: 13px; 
-            background: rgba(34, 197, 94, 0.9);
-            color: white; 
-            padding: 2px 6px; 
-            border-radius: 8px; 
-            font-weight: bold;
-            margin-top: 3px; 
-            border: 1px solid white;
-        }
+        .dest-pin { font-size: 38px; text-align: center; line-height: 1; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5)); }
 
-        @keyframes floatUpDown {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-        }
-
-        /* Destination Pin */
-        .dest-pin { 
-            font-size: 38px; 
-            text-align: center; 
-            line-height: 1; 
-            filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5)); 
-        }
-
-        /* =========================================================
-           3. UI CONTROLS & HUD
-           ========================================================= */
         .top-search-bar {
-            position: absolute; 
-            top: 15px; 
-            left: 50%; 
-            transform: translateX(-50%); 
-            z-index: 2000;
-            display: flex; 
-            gap: 8px; 
-            width: 90%; 
-            max-width: 400px;
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 2000;
+            display: flex; gap: 8px; width: 90%; max-width: 400px;
         }
-
         .top-search-bar input {
-            flex: 1; 
-            padding: 12px 15px; 
-            border-radius: 10px; 
-            border: 1px solid rgba(255,255,255,0.3);
-            background: rgba(15, 23, 42, 0.95); 
-            color: white; 
-            font-size: 14px; 
-            outline: none;
+            flex: 1; padding: 12px 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(15, 23, 42, 0.95); color: white; font-size: 14px; outline: none;
         }
-
-        .top-search-bar button {
-            background: #2563eb; 
-            color: white; 
-            border: none; 
-            padding: 0 15px;
-            border-radius: 10px; 
-            font-weight: bold; 
-            cursor: pointer;
-        }
+        .top-search-bar button { background: #2563eb; color: white; border: none; padding: 0 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
 
         .top-controls {
-            position: absolute; 
-            top: 75px; 
-            right: 15px; 
-            z-index: 2000;
-            display: flex; 
-            flex-direction: column; 
-            gap: 8px; 
-            max-height: 80vh; 
-            overflow-y: auto;
+            position: absolute; top: 75px; right: 15px; z-index: 2000;
+            display: flex; flex-direction: column; gap: 8px; max-height: 80vh; overflow-y: auto;
         }
-
         .btn-ctrl {
-            background: rgba(15, 23, 42, 0.92); 
-            color: #fff; 
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 11px 15px; 
-            border-radius: 10px; 
-            font-weight: 700; 
-            cursor: pointer; 
-            font-size: 13px; 
-            text-align: center;
+            background: rgba(15, 23, 42, 0.92); color: #fff; border: 1px solid rgba(255,255,255,0.15);
+            padding: 11px 15px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 13px; text-align: center;
         }
-
         .btn-highlight { background: #22c55e; border: none; }
         .btn-danger-custom { background: #ef4444; border: none; }
         .btn-home { background: #2563eb; border: none; }
 
         .hud-panel {
-            position: absolute; 
-            bottom: 25px; 
-            left: 15px; 
-            z-index: 2000;
-            background: rgba(15, 23, 42, 0.92); 
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 14px 20px; 
-            border-radius: 14px; 
-            color: white; 
-            min-width: 180px;
+            position: absolute; bottom: 25px; left: 15px; z-index: 2000;
+            background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(255,255,255,0.15);
+            padding: 14px 20px; border-radius: 14px; color: white; min-width: 180px;
         }
-
-        .hud-item { 
-            font-size: 13px; 
-            margin-bottom: 5px; 
-            display: flex; 
-            justify-content: space-between; 
-            gap: 15px; 
-        }
-
+        .hud-item { font-size: 13px; margin-bottom: 5px; display: flex; justify-content: space-between; gap: 15px; }
         .hud-value { font-weight: 700; color: #38bdf8; }
         .eta-value { color: #f59e0b; }
 
         .modal-overlay {
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%;
-            background: rgba(0,0,0,0.75); 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            z-index: 99999;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.75); display: flex; justify-content: center; align-items: center; z-index: 99999;
         }
-
-        .modal-card {
-            background: #fff; 
-            padding: 24px; 
-            border-radius: 16px; 
-            width: 85%; 
-            max-width: 380px; 
-            text-align: center; 
-            color: #111827;
-        }
-
+        .modal-card { background: #fff; padding: 24px; border-radius: 16px; width: 85%; max-width: 380px; text-align: center; color: #111827; }
         .modal-card h3 { margin-bottom: 10px; font-size: 20px; font-weight: 700; }
         .modal-card p { color: #4b5563; font-size: 14px; margin-bottom: 20px; }
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
@@ -244,13 +94,11 @@
 </head>
 <body>
 
-    <!-- Loader -->
     <div id="loader">
         <div class="spinner"></div>
         <p>Please turn on your GPS...</p>
     </div>
 
-    <!-- Search Bar -->
     <div class="top-search-bar">
         <input type="text" id="searchInput" placeholder="Search destination...">
         <button onclick="searchLocation()">🔍 Go</button>
@@ -258,7 +106,6 @@
 
     <div id="map"></div>
 
-    <!-- Stats HUD -->
     <div class="hud-panel">
         <div class="hud-item">Speed: <span id="speedVal" class="hud-value">0.0</span> km/h</div>
         <div class="hud-item">ETA: <span id="etaVal" class="hud-value eta-value">--</span></div>
@@ -275,7 +122,6 @@
         <button id="recenterBtn" class="btn-ctrl">🎯 Recenter</button>
     </div>
 
-    <!-- Modals -->
     <div id="placeTypeModal" class="modal-overlay hidden">
         <div class="modal-card">
             <h3>Select Place Type</h3>
@@ -311,9 +157,7 @@
             </div>
         </div>
     </div>
-
-    <!-- Leaflet & Routing JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
     <script>
@@ -341,7 +185,7 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             initializeMapEnvironment();
-            initializeBackgroundGeolocationWatcher();
+            initializeAccurateGPSPosition();
             initializeEventListeners();
             requestWakeLock();
         });
@@ -384,13 +228,7 @@
             if (typeName === 'Home') {
                 innerHtml = `<div class="home-indicator">🏠<span class="home-tag">My Home</span></div>`;
             }
-
-            return L.divIcon({ 
-                className: 'user-marker-wrapper', 
-                html: innerHtml, 
-                iconSize: [26, 26], 
-                iconAnchor: [13, 13] 
-            });
+            return L.divIcon({ className: 'user-marker-wrapper', html: innerHtml, iconSize: [28, 28], iconAnchor: [14, 14] });
         }
 
         function initializeEventListeners() {
@@ -407,15 +245,25 @@
             document.getElementById('deletePlaceBtn').addEventListener('click', deleteSelectedPlaceMarker);
         }
 
-        function initializeBackgroundGeolocationWatcher() {
+        function initializeAccurateGPSPosition() {
             if (!navigator.geolocation) return;
-            const geoOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 };
-            navigator.geolocation.watchPosition(handleNewGPSPositionUpdate, null, geoOptions);
+            const geoOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 };
+
+            navigator.geolocation.getCurrentPosition((position) => {
+                processNewPosition(position, true);
+            }, (error) => {
+                console.log("Initial GPS warning:", error);
+            }, geoOptions);
+
+            navigator.geolocation.watchPosition((position) => {
+                processNewPosition(position, false);
+            }, null, geoOptions);
         }
 
-        function handleNewGPSPositionUpdate(position) {
+        function processNewPosition(position, isInitialOpen) {
             const gpsAccuracy = position.coords.accuracy;
-            if (gpsAccuracy > 40) return; 
+            if (isInitialOpen && gpsAccuracy > 80) return;
+            if (!isInitialOpen && gpsAccuracy > 50) return;
 
             const latitudeValue = position.coords.latitude;
             const longitudeValue = position.coords.longitude;
@@ -435,7 +283,7 @@
             let distanceMovedMeters = calculateHaversineDistance(lastValidCoords, newCoordinateTuple);
             if (distanceMovedMeters > 80) return; 
 
-            if (speedInKmh < 1.0 && distanceMovedMeters < 2.5) {
+            if (speedInKmh < 1.0 && distanceMovedMeters < 2.0) {
                 document.getElementById('speedVal').innerText = "0.0";
                 return; 
             }
@@ -445,7 +293,7 @@
 
             document.getElementById('speedVal').innerText = speedInKmh.toFixed(1);
 
-            if (distanceMovedMeters >= 2.0) { 
+            if (distanceMovedMeters >= 1.5) { 
                 if (userMarker) userMarker.setLatLng(currentCoords);
                 if (!isReturningMode) {
                     appendPathHistoryNode(currentCoords);
@@ -454,7 +302,7 @@
                 }
             }
         }
-        // PART 2 OF 2 (Continuation of script)
+
         function appendPathHistoryNode(coords) {
             pathHistory.push(coords);
             if (!isLineFormed) {
@@ -568,9 +416,6 @@
             closeModals();
         }
 
-        // ==========================================
-        // SEARCH AND ROUTING LOGIC
-        // ==========================================
         async function searchLocation() {
             const query = document.getElementById('searchInput').value;
             if (!query) return;
@@ -633,21 +478,16 @@
             }).addTo(map);
         }
 
-        function openReturnModal() { 
-            document.getElementById('returnModal').classList.remove('hidden'); 
-        }
-
+        function openReturnModal() { document.getElementById('returnModal').classList.remove('hidden'); }
         function executeReturnJourney() {
             isReturningMode = true;
             closeModals();
         }
-
         function closeModals() {
             document.getElementById('placeTypeModal').classList.add('hidden');
             document.getElementById('placeActionModal').classList.add('hidden');
             document.getElementById('returnModal').classList.add('hidden');
         }
-
         function clearEntireJourneyData() {
             resetEntireJourneyState();
             if (routingControl) {
@@ -658,11 +498,9 @@
             }
             alert("All paths cleared successfully.");
         }
-
         function centerMapOnUser() {
             if (currentCoords) map.setView(currentCoords, 19, { animate: true });
         }
     </script>
 </body>
 </html>
-// (Part 1 ends here. Continue to Part 2 for remaining JavaScript functions)
