@@ -3,107 +3,456 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hamid's Ultimate 3D Persistent Tracker</title>
+    <title>Hamid's Ultimate 3D GPS Tracker - Part 1</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        /* CSS Styling - Ensuring consistent UI for 500 lines */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
-        html, body, #map { width: 100%; height: 100%; overflow: hidden; background: #000; }
-        #map { transition: transform 0.5s ease; width: 100%; height: 100%; }
+        html, body, #map { width: 100%; height: 100%; overflow: hidden; background-color: #0b0f19; }
+        #map { transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); transform-origin: bottom center; }
         
-        /* Persistent UI Elements */
-        .controls { position: absolute; top: 10px; right: 10px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
-        .btn { background: rgba(0,0,0,0.8); color: white; border: 1px solid #444; padding: 12px; border-radius: 8px; cursor: pointer; text-align: center; font-size: 13px; font-weight: bold; }
-        .hud { position: absolute; bottom: 20px; left: 10px; background: rgba(0,0,0,0.85); color: #0f0; padding: 15px; border-radius: 10px; z-index: 1000; pointer-events: none; }
-        .active-btn { border: 2px solid #38bdf8; }
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0b0f19; color: #fff; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 99999; font-weight: 600;
+        }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #38bdf8;
+            border-radius: 50%; width: 45px; height: 45px; animation: spin 0.8s linear infinite; margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .top-controls {
+            position: absolute; top: 15px; right: 15px; z-index: 2000;
+            display: flex; flex-direction: column; gap: 8px; max-height: 90vh; overflow-y: auto;
+        }
+        .btn-ctrl {
+            background: rgba(15, 23, 42, 0.92); color: #fff; border: 1px solid rgba(255,255,255,0.15);
+            padding: 11px 15px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 13px; text-align: center;
+        }
+        .btn-highlight { background: #22c55e; border: none; }
+        .btn-danger-custom { background: #ef4444; border: none; }
+        .btn-3d { background: #8b5cf6; border: none; }
+        .btn-home { background: #2563eb; border: none; }
+
+        .hud-panel {
+            position: absolute; bottom: 25px; left: 15px; z-index: 2000;
+            background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(255,255,255,0.15);
+            padding: 14px 20px; border-radius: 14px; color: white; min-width: 150px;
+        }
+        .hud-item { font-size: 13px; margin-bottom: 5px; display: flex; justify-content: space-between; gap: 15px; }
+        .hud-value { font-weight: 700; color: #38bdf8; }
+
+        .emoji-marker { font-size: 34px; text-align: center; line-height: 1; filter: drop-shadow(0px 5px 8px rgba(0,0,0,0.7)); cursor: pointer; }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.75); display: flex; justify-content: center; align-items: center; z-index: 99999;
+        }
+        .modal-card {
+            background: #fff; padding: 24px; border-radius: 16px; width: 85%; max-width: 380px; text-align: center; color: #111827;
+        }
+        .modal-card h3 { margin-bottom: 10px; font-size: 20px; font-weight: 700; }
+        .modal-card p { color: #4b5563; font-size: 14px; margin-bottom: 20px; }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .btn { padding: 11px 18px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-secondary { background-color: #e5e7eb; color: #374151; width: 100%; }
+        .btn-primary { background-color: #38bdf8; color: white; }
+        .btn-place { background-color: #f3f4f6; border: 1px solid #d1d5db; padding: 12px; width: 46%; }
+        .hidden { display: none !important; }
+
+        .bottom-selector {
+            position: absolute; bottom: 25px; right: 15px; z-index: 2000;
+            background: rgba(15, 23, 42, 0.92); padding: 10px 14px; border-radius: 10px; color: white; font-size: 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .bottom-selector select {
+            background: #1e293b; color: #fff; border: 1px solid #475569; padding: 6px; border-radius: 6px; margin-top: 4px; width: 100%; outline: none;
+        }
     </style>
 </head>
 <body>
 
-<div id="map"></div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <p>Loading Hamid's 3D Core & Locking GPS...</p>
+    </div>
 
-<div class="controls">
-    <button class="btn" onclick="addPlaceMode()">📍 Add Place</button>
-    <button class="btn" onclick="makeLine()">📏 Make Line</button>
-    <button class="btn" onclick="toggle3D()">🌐 3D Vision</button>
-    <button class="btn" onclick="goHomeMode()" style="background:#2563eb;">🏠 Go Home</button>
-    <button class="btn" onclick="recenter()">🎯 Recenter</button>
-    <button class="btn" onclick="clearData()" style="color:#ef4444;">🗑️ Clear Data</button>
-</div>
+    <div id="map"></div>
 
-<div class="hud">
-    Speed: <span id="speed">0.0</span> km/h<br>
-    Status: <span id="status">Tracking...</span>
-</div>
+    <div class="hud-panel">
+        <div class="hud-item">Speed: <span id="speedVal" class="hud-value">0.0</span> km/h</div>
+        <div class="hud-item">Status: <span id="modeVal" class="hud-value" style="color: #22c55e;">Standing Still 🧍</span></div>
+    </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-    // System Variables
-    let map = L.map('map', {zoomControl: false}).setView([31.5204, 74.3587], 17);
-    L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {subdomains: ['mt0','mt1','mt2','mt3']}).addTo(map);
+    <div class="top-controls">
+        <button id="addPlaceBtn" class="btn-ctrl">  Add Place</button>
+        <button id="makeLineBtn" class="btn-ctrl btn-highlight">  Make Line</button>
+        <button id="toggle3dBtn" class="btn-ctrl btn-3d">  3D Vision: OFF</button>
+        <button id="goHomeTriggerBtn" class="btn-ctrl btn-home">  Go Home</button>
+        <button id="manualReturnBtn" class="btn-ctrl">  Return Mode</button>
+        <button id="removeLineBtn" class="btn-ctrl btn-danger-custom">  Clear All Paths</button>
+        <button id="recenterBtn" class="btn-ctrl"> Recenter position </button>
+    </div>
 
-    let userMarker, pathHistory = [];
-    let greenLine = L.polyline([], {color: '#22c55e', weight: 6}).addTo(map);
-    let redLine = L.polyline([], {color: '#ef4444', weight: 4, dashArray: '5, 10'}).addTo(map);
-    let isReturning = false, is3D = false;
+    <div class="bottom-selector">
+        <div>Avatar Mode:</div>
+        <select id="manualAvatarSelect">
+            <option value="auto">⚡ Auto Speed Mode</option>
+            <option value="🚶">🧍 Person</option>
+            <option value="🚲">🚲 Bicycle</option>
+            <option value="🏍️">🏍️ Motorcycle</option>
+            <option value="🚗">🚗 Car</option>
+        </select>
+    </div>
 
-    // Persistent Tracking System
-    navigator.geolocation.watchPosition((pos) => {
-        let coords = [pos.coords.latitude, pos.coords.longitude];
-        let speed = (pos.coords.speed || 0) * 3.6;
+    <div id="placeTypeModal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>Select Place Type</h3>
+            <p>Assign a category to this location marker:</p>
+            <div class="btn-group">
+                <button class="btn btn-place" onclick="savePlace('🏠', 'Home')">🏠 Home</button>
+                <button class="btn btn-place" onclick="savePlace('🕌', 'Mosque')">🕌 Mosque</button>
+                <button class="btn btn-place" onclick="savePlace('🏢', 'Office')">🏢 Office</button>
+                <button class="btn btn-place" onclick="savePlace('🏪', 'Shop')">🏪 Shop</button>
+                <button class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="placeActionModal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>Place Options <span id="actionPlaceEmoji"></span></h3>
+            <p>Select what action to perform on this marker:</p>
+            <div class="btn-group">
+                <button id="startFromHereBtn" class="btn btn-primary" style="width: 100%;">Start Tracking From Here</button>
+                <button id="deletePlaceBtn" class="btn btn-danger" style="width: 100%;">Delete This Place</button>
+                <button class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="returnModal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>Return Journey</h3>
+            <p>Do you want to start tracking your return path home?</p>
+            <div class="btn-group">
+                <button id="returnNoBtn" class="btn btn-secondary" style="width: 46%;">Cancel</button>
+                <button id="returnYesBtn" class="btn btn-primary" style="background:#22c55e; width: 46%;">Yes, Return</button>
+            </div>
+        </div>
+                    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map, userMarker;
+        let places = []; 
+        let selectedPlaceId = null;
+        let pendingPlaceCoords = null;
         
-        if (pos.coords.accuracy > 40) return; // Anti-drift accuracy filter
+        let pathHistory = [];
+        let trackedDots = []; 
+        let wrongWayDots = [];
+        
+        let greenLine = null;
+        let redLine = null;
+        
+        let isLineFormed = false;
+        let isReturningMode = false;
+        let isAddPlaceMode = false;
+        let isFirstLocationFound = false;
+        let is3DMode = false;
+        
+        let currentCoords = null;
+        let lastValidCoords = null;
+        let currentEmoji = '🏍️'; 
+        let manualAvatarChoice = 'auto';
 
-        if (!userMarker) userMarker = L.marker(coords).addTo(map);
-        userMarker.setLatLng(coords);
-        document.getElementById('speed').innerText = speed.toFixed(1);
+        const loader = document.getElementById('loader');
 
-        if (isReturning) {
-            handleReturnLogic(coords);
-        } else {
-            pathHistory.push(coords);
-            greenLine.setLatLngs(pathHistory);
-        }
-    }, null, {enableHighAccuracy: true, maximumAge: 0});
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeMapEnvironment();
+            initializeBackgroundGeolocationWatcher();
+            initializeEventListeners();
+        });
 
-    function handleReturnLogic(coords) {
-        let found = false;
-        // Search for nearest green path segment
-        for(let i = pathHistory.length - 1; i >= 0; i--) {
-            if (map.distance(coords, pathHistory[i]) < 20) {
-                pathHistory = pathHistory.slice(0, i + 1);
-                greenLine.setLatLngs(pathHistory);
-                redLine.setLatLngs([]); 
-                found = true;
-                if(i === 0) {
-                    alert("Home reached!");
-                    pathHistory = [];
-                    greenLine.setLatLngs([]);
-                    isReturning = false;
+        function initializeMapEnvironment() {
+            map = L.map('map', { zoomControl: false, maxZoom: 20, minZoom: 5 }).setView([31.5204, 74.3587], 17);
+
+            L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+                maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: 'Hamid 3D Engine'
+            }).addTo(map);
+
+            greenLine = L.polyline([], { color: '#22c55e', weight: 6, opacity: 0.9 }).addTo(map);
+            redLine = L.polyline([], { color: '#ef4444', weight: 4, opacity: 0.8, dashArray: '6, 10' }).addTo(map);
+
+            map.on('click', (e) => {
+                if (isAddPlaceMode) {
+                    pendingPlaceCoords = [e.latlng.lat, e.latlng.lng];
+                    document.getElementById('placeTypeModal').classList.remove('hidden');
+                    isAddPlaceMode = false;
+                    document.getElementById('addPlaceBtn').innerText = "📍 Add Place";
+                    document.getElementById('addPlaceBtn').style.background = "rgba(15, 23, 42, 0.92)";
                 }
-                break;
+            });
+        }
+
+        function createEmojiMarkerIcon(emojiSymbol) {
+            return L.divIcon({ className: 'emoji-marker', html: `<div>${emojiSymbol}</div>`, iconSize: [42, 42], iconAnchor: [21, 21] });
+        }
+
+        function initializeEventListeners() {
+            document.getElementById('manualAvatarSelect').addEventListener('change', (e) => {
+                manualAvatarChoice = e.target.value;
+                if (manualAvatarChoice !== 'auto') {
+                    currentEmoji = manualAvatarChoice;
+                    if(userMarker) userMarker.setIcon(createEmojiMarkerIcon(currentEmoji));
+                }
+            });
+
+            document.getElementById('toggle3dBtn').addEventListener('click', toggle3DTiltVision);
+            document.getElementById('addPlaceBtn').addEventListener('click', toggleAddPlaceMode);
+            document.getElementById('makeLineBtn').addEventListener('click', convertDotsToSolidLine);
+            document.getElementById('goHomeTriggerBtn').addEventListener('click', openReturnModal);
+            document.getElementById('manualReturnBtn').addEventListener('click', openReturnModal);
+            document.getElementById('returnYesBtn').addEventListener('click', executeReturnJourney);
+            document.getElementById('returnNoBtn').addEventListener('click', closeModals);
+            document.getElementById('removeLineBtn').addEventListener('click', clearEntireJourneyData);
+            document.getElementById('recenterBtn').addEventListener('click', centerMapOnUser);
+
+            document.getElementById('startFromHereBtn').addEventListener('click', startTrackingFromPlace);
+            document.getElementById('deletePlaceBtn').addEventListener('click', deleteSelectedPlaceMarker);
+        }
+
+        function initializeBackgroundGeolocationWatcher() {
+            if (!navigator.geolocation) return;
+            const geoOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 6000 };
+            navigator.geolocation.watchPosition(handleNewGPSPositionUpdate, null, geoOptions);
+        }
+
+        function handleNewGPSPositionUpdate(position) {
+            const gpsAccuracy = position.coords.accuracy;
+            if (gpsAccuracy > 35) return;
+
+            const latitudeValue = position.coords.latitude;
+            const longitudeValue = position.coords.longitude;
+            const newCoordinateTuple = [latitudeValue, longitudeValue];
+
+            let speedInKmh = (position.coords.speed || 0) * 3.6;
+
+            if (!isFirstLocationFound) {
+                isFirstLocationFound = true;
+                lastValidCoords = newCoordinateTuple;
+                currentCoords = newCoordinateTuple;
+                loader.classList.add('hidden');
+                map.setView(currentCoords, 19);
+                userMarker = L.marker(currentCoords, { icon: createEmojiMarkerIcon(currentEmoji), zIndexOffset: 2000 }).addTo(map);
+                return; 
+            }
+
+            let distanceMovedMeters = calculateHaversineDistance(lastValidCoords, newCoordinateTuple);
+            
+            if (speedInKmh < 1.2 && distanceMovedMeters < 3.5) {
+                document.getElementById('speedVal').innerText = "0.0";
+                updateDynamicAvatarIcon(0);
+                if (!isReturningMode && !isLineFormed) {
+                    document.getElementById('modeVal').innerText = "Standing Still " + currentEmoji;
+                }
+                return; 
+            }
+
+            if (distanceMovedMeters > 120 && speedInKmh < 45) return;
+
+            lastValidCoords = newCoordinateTuple;
+            currentCoords = newCoordinateTuple;
+
+            document.getElementById('speedVal').innerText = speedInKmh.toFixed(1);
+            updateDynamicAvatarIcon(speedInKmh);
+            
+            if (!isLineFormed && !isReturningMode) {
+                document.getElementById('modeVal').innerText = "Tracking " + currentEmoji;
+                document.getElementById('modeVal').style.color = "#38bdf8";
+            }
+
+            if (distanceMovedMeters >= 2.5) { 
+                if (userMarker) userMarker.setLatLng(currentCoords);
+                if (!isReturningMode) {
+                    appendPathHistoryNode(currentCoords);
+                } else {
+                    executeSmartReturnCleanupLogic(currentCoords);
+                }
             }
         }
-        if (!found) {
-            let pts = redLine.getLatLngs();
-            pts.push(coords);
-            redLine.setLatLngs(pts);
+
+        function updateDynamicAvatarIcon(speedKmh) {
+            if (manualAvatarChoice !== 'auto') return;
+            let calculatedEmoji = '🧍';
+            if (speedKmh > 45) calculatedEmoji = '🚗';
+            else if (speedKmh > 16) calculatedEmoji = '🏍️';
+            else if (speedKmh > 5.0) calculatedEmoji = '🚲';
+
+            if (calculatedEmoji !== currentEmoji) {
+                currentEmoji = calculatedEmoji;
+                if (userMarker) userMarker.setIcon(createEmojiMarkerIcon(currentEmoji));
+            }
         }
-    }
 
-    // Features
-    function toggle3D() {
-        is3D = !is3D;
-        document.getElementById('map').style.transform = is3D ? "perspective(600px) rotateX(45deg)" : "none";
-    }
-    function goHomeMode() { isReturning = true; document.getElementById('status').innerText = "Returning..."; }
-    function recenter() { if(userMarker) map.setView(userMarker.getLatLng(), 18); }
-    function clearData() { pathHistory = []; greenLine.setLatLngs([]); redLine.setLatLngs([]); }
-    function addPlaceMode() { alert("Click map to drop pin"); }
-    function makeLine() { alert("Path fixed."); }
+        function appendPathHistoryNode(coords) {
+            pathHistory.push(coords);
+            if (!isLineFormed) {
+                const miniDotMarker = L.circleMarker(coords, { radius: 4, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.9, stroke: false }).addTo(map);
+                trackedDots.push({ coords: coords, layer: miniDotMarker });
+            } else {
+                greenLine.setLatLngs(pathHistory);
+            }
+        }
 
-    // Placeholder for remaining lines to hit 500 line target
-    // ... logic continues ...
-</script>
+        function convertDotsToSolidLine() {
+            if (pathHistory.length < 2 || isLineFormed) return;
+            trackedDots.forEach(dotObj => map.removeLayer(dotObj.layer));
+            trackedDots = [];
+            greenLine.setLatLngs(pathHistory);
+            isLineFormed = true;
+            document.getElementById('modeVal').innerText = "Line Path Formed";
+        }
+
+        function executeSmartReturnCleanupLogic(currentPositionCoords) {
+            let { shortestDistance, nearestIndex } = findNearestNodeInPath(currentPositionCoords, pathHistory);
+            
+            if (shortestDistance > 14) { 
+                const redTrailDot = L.circleMarker(currentPositionCoords, { radius: 4.5, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, stroke: false }).addTo(map);
+                wrongWayDots.push(redTrailDot);
+
+                let currentRedPoints = redLine.getLatLngs();
+                currentRedPoints.push(currentPositionCoords);
+                redLine.setLatLngs(currentRedPoints);
+            } else {
+                clearAllWrongWayRedDots();
+                redLine.setLatLngs([]);
+                pathHistory = pathHistory.slice(0, nearestIndex + 1);
+                greenLine.setLatLngs(pathHistory);
+                
+                if (pathHistory.length <= 2) {
+                    alert("Home reached successfully! Journey completed.");
+                    resetEntireJourneyState();
+                }
+            }
+        }
+
+        function clearAllWrongWayRedDots() {
+            wrongWayDots.forEach(dot => map.removeLayer(dot));
+            wrongWayDots = [];
+        }
+
+        function resetEntireJourneyState() {
+            trackedDots.forEach(d => map.removeLayer(d.layer));
+            trackedDots = [];
+            pathHistory = [];
+            if (greenLine) greenLine.setLatLngs([]);
+            if (redLine) redLine.setLatLngs([]);
+            clearAllWrongWayRedDots();
+            isLineFormed = false;
+            isReturningMode = false;
+            document.getElementById('modeVal').innerText = "Tracking " + currentEmoji;
+            document.getElementById('modeVal').style.color = "#38bdf8";
+        }
+
+        function calculateHaversineDistance(coordA, coordB) {
+            const earthRadiusMeters = 6371e3;
+            const latRad1 = coordA[0] * Math.PI / 180;
+            const latRad2 = coordB[0] * Math.PI / 180;
+            const deltaLatRad = (coordB[0] - coordA[0]) * Math.PI / 180;
+            const deltaLngRad = (coordB[1] - coordA[1]) * Math.PI / 180;
+            const aVal = Math.sin(deltaLatRad/2) * Math.sin(deltaLatRad/2) + Math.cos(latRad1) * Math.cos(latRad2) * Math.sin(deltaLngRad/2) * Math.sin(deltaLngRad/2);
+            return earthRadiusMeters * (2 * Math.atan2(Math.sqrt(aVal), Math.sqrt(1-aVal)));
+        }
+
+        function findNearestNodeInPath(currentPosition, pathArray) {
+            let shortestDistance = Infinity;
+            let nearestIndex = -1;
+            for(let i = 0; i < pathArray.length; i++) {
+                let dist = calculateHaversineDistance(currentPosition, pathArray[i]);
+                if(dist < shortestDistance) { shortestDistance = dist; nearestIndex = i; }
+            }
+            return { shortestDistance, nearestIndex };
+        }
+
+        function toggleAddPlaceMode() {
+            isAddPlaceMode = !isAddPlaceMode;
+            const addBtn = document.getElementById('addPlaceBtn');
+            addBtn.innerText = isAddPlaceMode ? "📍 Tap Map Pin" : "📍 Add Place";
+            addBtn.style.background = isAddPlaceMode ? "#38bdf8" : "rgba(15, 23, 42, 0.92)";
+        }
+
+        function savePlace(emojiSymbol, typeName) {
+            if (!pendingPlaceCoords) return;
+            let uniquePlaceId = Date.now();
+            let placeMarkerInstance = L.marker(pendingPlaceCoords, { icon: createEmojiMarkerIcon(emojiSymbol) }).addTo(map);
+            
+            placeMarkerInstance.on('click', (eventClick) => {
+                L.DomEvent.stopPropagation(eventClick);
+                selectedPlaceId = uniquePlaceId;
+                document.getElementById('actionPlaceEmoji').innerText = emojiSymbol;
+                document.getElementById('placeActionModal').classList.remove('hidden');
+            });
+            
+            places.push({ id: uniquePlaceId, coords: pendingPlaceCoords, marker: placeMarkerInstance, type: typeName });
+            closeModals();
+        }
+
+        function startTrackingFromPlace() {
+            let matchedPlace = places.find(p => p.id === selectedPlaceId);
+            if(matchedPlace) {
+                resetEntireJourneyState();
+                appendPathHistoryNode(matchedPlace.coords);
+            }
+            closeModals();
+        }
+
+        function deleteSelectedPlaceMarker() {
+            let targetIndex = places.findIndex(p => p.id === selectedPlaceId);
+            if (targetIndex > -1) {
+                map.removeLayer(places[targetIndex].marker);
+                places.splice(targetIndex, 1);
+            }
+            closeModals();
+        }
+
+        function toggle3DTiltVision() {
+            is3DMode = !is3DMode;
+            let mapDOMContainer = document.getElementById('map');
+            let tiltButton = document.getElementById('toggle3dBtn');
+            
+            if (is3DMode) {
+                mapDOMContainer.style.transform = "perspective(700px) rotateX(48deg)";
+                tiltButton.innerText = "🌐 3D Vision: ON";
+                tiltButton.style.background = "#7c3aed";
+            } else {
+                mapDOMContainer.style.transform = "none";
+                tiltButton.innerText = "🌐 3D Vision: OFF";
+                tiltButton.style.background = "#8b5cf6";
+            }
+        }
+
+        function openReturnModal() { document.getElementById('returnModal').classList.remove('hidden'); }
+        function executeReturnJourney() {
+            isReturningMode = true;
+            document.getElementById('modeVal').innerText = "Returning Mode Active 🚨";
+            document.getElementById('modeVal').style.color = "#ef4444";
+            closeModals();
+        }
+        function closeModals() {
+            document.getElementById('placeTypeModal').classList.add('hidden');
+            document.getElementById('placeActionModal').classList.add('hidden');
+            document.getElementById('returnModal').classList.add('hidden');
+        }
+        function clearEntireJourneyData() {
+            resetEntireJourneyState();
+            alert("All recorded paths cleared successfully.");
+        }
+        function centerMapOnUser() {
+            if (currentCoords) map.setView(currentCoords, 19, { animate: true });
+            else alert("Acquiring current GPS lock...");
+        }
+    </script>
 </body>
-</html>
+    </html>
