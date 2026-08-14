@@ -3,17 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hamid's Ultimate 3D GPS Tracker - Part 1</title>
+    <title>Hamid's Smart 3D Avatar GPS Tracker - Part 1</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
+        /* =========================================================
+           1. CORE STYLING
+           ========================================================= */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
         html, body, #map { width: 100%; height: 100%; overflow: hidden; background-color: #0b0f19; }
-        #map { transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); transform-origin: bottom center; }
+        
+        /* Smooth 3D Transition for Map */
+        #map { 
+            transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1); 
+            transform-origin: bottom center; 
+        }
         
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #0b0f19; color: #fff; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 99999; font-weight: 600;
+            justify-content: center; align-items: center; z-index: 99999; font-weight: 600; text-align: center; padding: 20px;
         }
         .spinner {
             border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #38bdf8;
@@ -21,6 +29,47 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* =========================================================
+           2. 3D EMOJI AVATARS & HOVERING HOME
+           ========================================================= */
+        .emoji-marker { 
+            text-align: center; line-height: 1; 
+            filter: drop-shadow(0px 8px 10px rgba(0,0,0,0.8)); cursor: pointer; 
+        }
+        
+        /* The inner div holds the emoji. We counter-rotate it in 3D mode so it stands up! */
+        .emoji-marker div {
+            font-size: 38px;
+            display: inline-block;
+            transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+            transform-origin: bottom center;
+        }
+
+        /* When 3D Mode is Active (Class added to body) */
+        body.mode-3d .emoji-marker div {
+            transform: rotateX(-50deg) translateY(-20px) scale(1.3);
+        }
+
+        /* Hovering Home Indicator */
+        .home-indicator {
+            font-size: 45px !important;
+            animation: floatUpDown 2s infinite ease-in-out;
+            text-align: center;
+        }
+        .home-tag {
+            display: block; font-size: 14px; background: rgba(34, 197, 94, 0.9);
+            color: white; padding: 4px 8px; border-radius: 10px; font-weight: bold;
+            margin-top: 5px; border: 1px solid white;
+        }
+
+        @keyframes floatUpDown {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+        }
+
+        /* =========================================================
+           3. UI CONTROLS & HUD
+           ========================================================= */
         .top-controls {
             position: absolute; top: 15px; right: 15px; z-index: 2000;
             display: flex; flex-direction: column; gap: 8px; max-height: 90vh; overflow-y: auto;
@@ -41,8 +90,6 @@
         }
         .hud-item { font-size: 13px; margin-bottom: 5px; display: flex; justify-content: space-between; gap: 15px; }
         .hud-value { font-weight: 700; color: #38bdf8; }
-
-        .emoji-marker { font-size: 34px; text-align: center; line-height: 1; filter: drop-shadow(0px 5px 8px rgba(0,0,0,0.7)); cursor: pointer; }
 
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -75,24 +122,24 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <p>Loading Hamid's 3D Core & Locking GPS...</p>
+        <p>Hamid Bhai: Starting 3D Avatar Engine & Locking GPS...</p>
     </div>
 
     <div id="map"></div>
 
     <div class="hud-panel">
         <div class="hud-item">Speed: <span id="speedVal" class="hud-value">0.0</span> km/h</div>
-        <div class="hud-item">Status: <span id="modeVal" class="hud-value" style="color: #22c55e;">Standing Still 🧍</span></div>
+        <div class="hud-item">Status: <span id="modeVal" class="hud-value" style="color: #22c55e;">Locked on Road 🛣️</span></div>
     </div>
 
     <div class="top-controls">
-        <button id="addPlaceBtn" class="btn-ctrl">  Add Place</button>
-        <button id="makeLineBtn" class="btn-ctrl btn-highlight">  Make Line</button>
-        <button id="toggle3dBtn" class="btn-ctrl btn-3d">  3D Vision: OFF</button>
-        <button id="goHomeTriggerBtn" class="btn-ctrl btn-home">  Go Home</button>
-        <button id="manualReturnBtn" class="btn-ctrl">  Return Mode</button>
-        <button id="removeLineBtn" class="btn-ctrl btn-danger-custom">  Clear All Paths</button>
-        <button id="recenterBtn" class="btn-ctrl"> Recenter position </button>
+        <button id="addPlaceBtn" class="btn-ctrl">📍 Add Place</button>
+        <button id="makeLineBtn" class="btn-ctrl btn-highlight">📏 Make Line</button>
+        <button id="toggle3dBtn" class="btn-ctrl btn-3d">🌐 3D Avatar Vision: OFF</button>
+        <button id="goHomeTriggerBtn" class="btn-ctrl btn-home">🏠 Track Home</button>
+        <button id="manualReturnBtn" class="btn-ctrl">🔄 Return Mode</button>
+        <button id="removeLineBtn" class="btn-ctrl btn-danger-custom">🗑️ Clear Paths</button>
+        <button id="recenterBtn" class="btn-ctrl">🎯 Recenter</button>
     </div>
 
     <div class="bottom-selector">
@@ -111,7 +158,7 @@
             <h3>Select Place Type</h3>
             <p>Assign a category to this location marker:</p>
             <div class="btn-group">
-                <button class="btn btn-place" onclick="savePlace('🏠', 'Home')">🏠 Home</button>
+                <button class="btn btn-place" onclick="savePlace('🏠', 'Home')">🏠 Home (Hovering)</button>
                 <button class="btn btn-place" onclick="savePlace('🕌', 'Mosque')">🕌 Mosque</button>
                 <button class="btn btn-place" onclick="savePlace('🏢', 'Office')">🏢 Office</button>
                 <button class="btn btn-place" onclick="savePlace('🏪', 'Shop')">🏪 Shop</button>
@@ -141,8 +188,8 @@
                 <button id="returnYesBtn" class="btn btn-primary" style="background:#22c55e; width: 46%;">Yes, Return</button>
             </div>
         </div>
-                    </div>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+            </div>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         let map, userMarker;
         let places = []; 
@@ -178,8 +225,9 @@
         function initializeMapEnvironment() {
             map = L.map('map', { zoomControl: false, maxZoom: 20, minZoom: 5 }).setView([31.5204, 74.3587], 17);
 
+            // Using satellite 3D-like view
             L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
-                maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: 'Hamid 3D Engine'
+                maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: 'Hamid 3D Avatar Engine'
             }).addTo(map);
 
             greenLine = L.polyline([], { color: '#22c55e', weight: 6, opacity: 0.9 }).addTo(map);
@@ -196,8 +244,21 @@
             });
         }
 
-        function createEmojiMarkerIcon(emojiSymbol) {
-            return L.divIcon({ className: 'emoji-marker', html: `<div>${emojiSymbol}</div>`, iconSize: [42, 42], iconAnchor: [21, 21] });
+        // Updated function to handle special "Home" hovering marker
+        function createEmojiMarkerIcon(emojiSymbol, typeName = 'Avatar') {
+            let innerHtml = `<div>${emojiSymbol}</div>`;
+            
+            // If it's a Home marker, give it the special floating UI
+            if (typeName === 'Home') {
+                innerHtml = `<div class="home-indicator">🏠<span class="home-tag">My Home</span></div>`;
+            }
+
+            return L.divIcon({ 
+                className: 'emoji-marker', 
+                html: innerHtml, 
+                iconSize: [60, 60], 
+                iconAnchor: [30, 30] 
+            });
         }
 
         function initializeEventListeners() {
@@ -225,13 +286,13 @@
 
         function initializeBackgroundGeolocationWatcher() {
             if (!navigator.geolocation) return;
-            const geoOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 6000 };
+            const geoOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 };
             navigator.geolocation.watchPosition(handleNewGPSPositionUpdate, null, geoOptions);
         }
 
         function handleNewGPSPositionUpdate(position) {
             const gpsAccuracy = position.coords.accuracy;
-            if (gpsAccuracy > 35) return;
+            if (gpsAccuracy > 18) return; // Strict road lock filter
 
             const latitudeValue = position.coords.latitude;
             const longitudeValue = position.coords.longitude;
@@ -244,23 +305,22 @@
                 lastValidCoords = newCoordinateTuple;
                 currentCoords = newCoordinateTuple;
                 loader.classList.add('hidden');
-                map.setView(currentCoords, 19);
+                map.setView(currentCoords, 19, { animate: false });
                 userMarker = L.marker(currentCoords, { icon: createEmojiMarkerIcon(currentEmoji), zIndexOffset: 2000 }).addTo(map);
                 return; 
             }
 
             let distanceMovedMeters = calculateHaversineDistance(lastValidCoords, newCoordinateTuple);
-            
-            if (speedInKmh < 1.2 && distanceMovedMeters < 3.5) {
+            if (distanceMovedMeters > 80) return; // Ignore teleports
+
+            if (speedInKmh < 1.0 && distanceMovedMeters < 2.5) {
                 document.getElementById('speedVal').innerText = "0.0";
                 updateDynamicAvatarIcon(0);
                 if (!isReturningMode && !isLineFormed) {
-                    document.getElementById('modeVal').innerText = "Standing Still " + currentEmoji;
+                    document.getElementById('modeVal').innerText = "Locked on Road " + currentEmoji;
                 }
                 return; 
             }
-
-            if (distanceMovedMeters > 120 && speedInKmh < 45) return;
 
             lastValidCoords = newCoordinateTuple;
             currentCoords = newCoordinateTuple;
@@ -269,11 +329,11 @@
             updateDynamicAvatarIcon(speedInKmh);
             
             if (!isLineFormed && !isReturningMode) {
-                document.getElementById('modeVal').innerText = "Tracking " + currentEmoji;
+                document.getElementById('modeVal').innerText = "Tracking on Road " + currentEmoji;
                 document.getElementById('modeVal').style.color = "#38bdf8";
             }
 
-            if (distanceMovedMeters >= 2.5) { 
+            if (distanceMovedMeters >= 2.0) { 
                 if (userMarker) userMarker.setLatLng(currentCoords);
                 if (!isReturningMode) {
                     appendPathHistoryNode(currentCoords);
@@ -286,9 +346,9 @@
         function updateDynamicAvatarIcon(speedKmh) {
             if (manualAvatarChoice !== 'auto') return;
             let calculatedEmoji = '🧍';
-            if (speedKmh > 45) calculatedEmoji = '🚗';
-            else if (speedKmh > 16) calculatedEmoji = '🏍️';
-            else if (speedKmh > 5.0) calculatedEmoji = '🚲';
+            if (speedKmh > 40) calculatedEmoji = '🚗';
+            else if (speedKmh > 15) calculatedEmoji = '🏍️';
+            else if (speedKmh > 4.0) calculatedEmoji = '🚲';
 
             if (calculatedEmoji !== currentEmoji) {
                 currentEmoji = calculatedEmoji;
@@ -312,13 +372,13 @@
             trackedDots = [];
             greenLine.setLatLngs(pathHistory);
             isLineFormed = true;
-            document.getElementById('modeVal').innerText = "Line Path Formed";
+            document.getElementById('modeVal').innerText = "Road Path Formed 🛣️";
         }
 
         function executeSmartReturnCleanupLogic(currentPositionCoords) {
             let { shortestDistance, nearestIndex } = findNearestNodeInPath(currentPositionCoords, pathHistory);
             
-            if (shortestDistance > 14) { 
+            if (shortestDistance > 12) { 
                 const redTrailDot = L.circleMarker(currentPositionCoords, { radius: 4.5, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, stroke: false }).addTo(map);
                 wrongWayDots.push(redTrailDot);
 
@@ -332,7 +392,7 @@
                 greenLine.setLatLngs(pathHistory);
                 
                 if (pathHistory.length <= 2) {
-                    alert("Home reached successfully! Journey completed.");
+                    alert("Home reached successfully via road!");
                     resetEntireJourneyState();
                 }
             }
@@ -352,8 +412,8 @@
             clearAllWrongWayRedDots();
             isLineFormed = false;
             isReturningMode = false;
-            document.getElementById('modeVal').innerText = "Tracking " + currentEmoji;
-            document.getElementById('modeVal').style.color = "#38bdf8";
+            document.getElementById('modeVal').innerText = "Locked on Road " + currentEmoji;
+            document.getElementById('modeVal').style.color = "#22c55e";
         }
 
         function calculateHaversineDistance(coordA, coordB) {
@@ -386,7 +446,7 @@
         function savePlace(emojiSymbol, typeName) {
             if (!pendingPlaceCoords) return;
             let uniquePlaceId = Date.now();
-            let placeMarkerInstance = L.marker(pendingPlaceCoords, { icon: createEmojiMarkerIcon(emojiSymbol) }).addTo(map);
+            let placeMarkerInstance = L.marker(pendingPlaceCoords, { icon: createEmojiMarkerIcon(emojiSymbol, typeName) }).addTo(map);
             
             placeMarkerInstance.on('click', (eventClick) => {
                 L.DomEvent.stopPropagation(eventClick);
@@ -417,18 +477,24 @@
             closeModals();
         }
 
+        // THE MAGIC 3D AVATAR TOGGLE
         function toggle3DTiltVision() {
             is3DMode = !is3DMode;
             let mapDOMContainer = document.getElementById('map');
             let tiltButton = document.getElementById('toggle3dBtn');
             
             if (is3DMode) {
-                mapDOMContainer.style.transform = "perspective(700px) rotateX(48deg)";
-                tiltButton.innerText = "🌐 3D Vision: ON";
+                // Tilt the map
+                mapDOMContainer.style.transform = "perspective(700px) rotateX(50deg)";
+                // Add class to body to make avatars stand up!
+                document.body.classList.add('mode-3d');
+                tiltButton.innerText = "🌐 3D Avatar Vision: ON";
                 tiltButton.style.background = "#7c3aed";
             } else {
+                // Revert to 2D
                 mapDOMContainer.style.transform = "none";
-                tiltButton.innerText = "🌐 3D Vision: OFF";
+                document.body.classList.remove('mode-3d');
+                tiltButton.innerText = "🌐 3D Avatar Vision: OFF";
                 tiltButton.style.background = "#8b5cf6";
             }
         }
@@ -436,7 +502,7 @@
         function openReturnModal() { document.getElementById('returnModal').classList.remove('hidden'); }
         function executeReturnJourney() {
             isReturningMode = true;
-            document.getElementById('modeVal').innerText = "Returning Mode Active 🚨";
+            document.getElementById('modeVal').innerText = "Returning via Road 🚨";
             document.getElementById('modeVal').style.color = "#ef4444";
             closeModals();
         }
@@ -447,12 +513,13 @@
         }
         function clearEntireJourneyData() {
             resetEntireJourneyState();
-            alert("All recorded paths cleared successfully.");
+            alert("All paths cleared successfully.");
         }
         function centerMapOnUser() {
             if (currentCoords) map.setView(currentCoords, 19, { animate: true });
-            else alert("Acquiring current GPS lock...");
+            else alert("Acquiring accurate GPS road lock...");
         }
     </script>
 </body>
     </html>
+    
